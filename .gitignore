@@ -1,0 +1,35 @@
+# Node / Next.js
+node_modules/
+.next/
+dist/
+build/
+coverage/
+*.log
+.env*
+
+# Frontend
+frontend/.next/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/coverage/
+
+# .NET / C#
+bin/
+obj/
+*.user
+*.suo
+*.swp
+*.tmp
+*.log
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Misc
+.env.local
+.env.development.local
+.env.production.local

@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: Auth Signup API (A2)
+  version: 1.0.0
+paths:
+  /api/auth/signup:
+    post:
+      summary: Create a new user with Basic role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [FullName, Email, Password]
+              properties:
+                FullName:
+                  type: string
+                  maxLength: 100
+                Email:
+                  type: string
+                  format: email
+                  maxLength: 100
+                  description: Normalized to lowercase
+                Password:
+                  type: string
+                  minLength: 8
+                  description: Must contain at least 1 letter and 1 number
+                Phone:
+                  type: string
+                  maxLength: 15
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      email:
+                        type: string
+        '400':
+          description: Validation error (e.g., weak password)
+        '409':
+          description: Email already registered (non-deleted user)

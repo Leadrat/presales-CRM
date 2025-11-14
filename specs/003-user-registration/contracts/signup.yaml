@@ -1,0 +1,93 @@
+openapi: 3.0.3
+info:
+  title: Spec 3 — Auth Signup
+  version: 1.0.0
+paths:
+  /api/auth/signup:
+    post:
+      summary: Register a new user (domain-restricted) and assign Basic role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [FullName, Email, Password]
+              properties:
+                FullName:
+                  type: string
+                  minLength: 3
+                  maxLength: 100
+                Email:
+                  type: string
+                  format: email
+                  maxLength: 100
+                  description: Must belong to an allowed domain; normalized to lowercase
+                Password:
+                  type: string
+                  minLength: 8
+                  description: Must include at least 1 letter and 1 number
+                Phone:
+                  type: string
+                  maxLength: 15
+      responses:
+        '200':
+          description: User created successfully (no tokens returned)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      email:
+                        type: string
+        '400':
+          description: Validation error (e.g., weak password)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: WEAK_PASSWORD
+                      message:
+                        type: string
+        '403':
+          description: Domain not allowed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: DOMAIN_NOT_ALLOWED
+                      message:
+                        type: string
+        '409':
+          description: Email already registered (non-deleted user)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: EMAIL_EXISTS
+                      message:
+                        type: string
