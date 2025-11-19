@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "Middleware to enforce Role-Based Access Control using JWT role claims. Admin users can access all resources; Basic users can access only records they created (CreatedBy = sub). Works with .NET Core 8, PostgreSQL, and JWT-based auth. Stack: backend .NET Core 8 Web API, database PostgreSQL (GUID PK, TitleCase tables), frontend Next.js 15."
 
+## Clarifications
+
+### Session 2025-11-14
+
+- Q: How should we implement RBAC/ownership enforcement for controllers? → A: Policy-based AuthorizationHandler (custom `IAuthorizationRequirement` + `AuthorizationHandler`) with an attribute to bind ownership semantics.
+- Q: For list endpoints, where should ownership filtering be enforced? → A: In the data access layer via repository/specification or EF query filter driven by the current principal (server-side, centralized).
+- Q: For single-resource endpoints, how does the handler obtain the entity for ownership checks? → A: A custom attribute declares the entity type and route id parameter; the handler reads route values, loads the entity via DbContext, and evaluates `CreatedBy == sub`.
+- Q: Exact list filtering mechanism? → A: Repository/Specification pattern that injects current principal and applies `CreatedBy == sub` for Basic; Admin bypasses the predicate.
+- Q: On create, who sets `CreatedBy`? → A: Server always sets `CreatedBy = sub` and ignores any client-provided value (applies to all roles).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Admin can access any protected resource (Priority: P1)
@@ -92,6 +102,11 @@ Developers can protect endpoints with minimal code by applying a policy/attribut
 - **FR-010**: The solution MUST not require modifying controller action logic; enforcement occurs via middleware/policy and, for lists, via a standard repository/specification pattern or query filter.
 - **FR-011**: The system MUST log authorization denials with correlation id, user id (if present), role, action, and resource identifier when available.
 - **FR-012**: Performance overhead introduced by the RBAC layer MUST be minimal (<5ms median per request in development on a typical machine).
+- **FR-013**: RBAC MUST be implemented using policy-based authorization (`IAuthorizationRequirement` and `AuthorizationHandler`) with a reusable attribute to declare role/ownership rules per endpoint.
+- **FR-014**: List ownership enforcement MUST be implemented in the data layer using a repository/specification or EF global query filter that injects the current user id; controllers MUST NOT hand-write ownership filters.
+- **FR-015**: For single-resource endpoints, the attribute MUST specify the entity type and route id parameter; the authorization handler MUST load the entity via DbContext and enforce `CreatedBy == sub` (return 403 if owned by another user, 404 if not found).
+- **FR-016**: The repository/specification layer MUST be the standard mechanism for list filtering; it MUST accept/access the current principal and apply/remove the ownership predicate based on role.
+- **FR-017**: On create operations, the API MUST set `CreatedBy` from the authenticated user’s `sub` claim and MUST ignore any client-supplied `CreatedBy` value (for both Admin and Basic).
 
 ### Assumptions
 

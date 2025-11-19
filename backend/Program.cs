@@ -7,6 +7,10 @@ using Microsoft.AspNetCore.Identity;
 using Api.Services;
 using Api.Options;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
+using Api.Authorization;
+using Api.Authorization.Requirements;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,7 +59,16 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+// Authorization & RBAC services
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(Policies.OwnedBy, policy =>
+        policy.AddRequirements(new OwnershipRequirement()));
+});
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IAuthorizationHandler, Api.Authorization.Handlers.OwnershipHandler>();
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, Api.Authorization.CustomAuthorizationResultHandler>();
 
 // CORS for frontend
 builder.Services.AddCors(options =>
