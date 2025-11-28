@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: Activity Log API
+  version: 1.0.0
+  description: Activity Log endpoints for Pre-Sales CRM, scoped per account.
+servers:
+  - url: /api
+
+paths:
+  /accounts/{accountId}/activity:
+    get:
+      summary: Get Activity Log entries for an account
+      tags:
+        - Activity
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          description: Account identifier
+          schema:
+            type: string
+            format: uuid
+        - name: eventTypes
+          in: query
+          required: false
+          description: Comma-separated list of event type codes to include
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Start of date range (inclusive, ISO-8601 UTC)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: End of date range (inclusive, ISO-8601 UTC)
+          schema:
+            type: string
+            format: date-time
+        - name: userId
+          in: query
+          required: false
+          description: Filter by actor user ID
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          required: false
+          description: Pagination cursor returned from a previous call
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Page size (number of entries to return)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Activity Log entries for the account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ActivityLogEntry'
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  error:
+                    $ref: '#/components/schemas/ErrorResponse'
+                  meta:
+                    type: object
+                    additionalProperties: true
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (user not allowed to view this account)
+
+  /activity/types:
+    get:
+      summary: Get available Activity Log event types
+      tags:
+        - Activity
+      responses:
+        '200':
+          description: List of activity types that can appear in the Activity Log
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ActivityType'
+                  error:
+                    $ref: '#/components/schemas/ErrorResponse'
+                  meta:
+                    type: object
+                    additionalProperties: true
+
+components:
+  schemas:
+    ActivityLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          description: Standardized event type code (e.g. ACCOUNT_CREATED, DEAL_STAGE_CHANGED)
+        description:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+          description: Event time in ISO-8601 UTC (client converts to local timezone)
+        actorId:
+          type: string
+          format: uuid
+          nullable: true
+        actorName:
+          type: string
+        relatedEntityType:
+          type: string
+          nullable: true
+          description: e.g. Account, Contact, Demo, Note
+        relatedEntityId:
+          type: string
+          format: uuid
+          nullable: true
+
+    ActivityType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: Internal code/name for the activity type
+        label:
+          type: string
+          description: Human-readable label for use in UI filters
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true

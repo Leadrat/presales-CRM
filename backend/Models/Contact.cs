@@ -13,6 +13,15 @@ public class Contact
     public string? Phone { get; set; }
     public string? Position { get; set; }
 
+    // Spec 012 — Contact Model Enrichment
+    public string? PersonalPhone { get; set; }
+    public string? WorkPhone { get; set; }
+    public string? Designation { get; set; }
+    public string? City { get; set; }
+    public DateTimeOffset? DateOfBirth { get; set; }
+    public string? InstagramUrl { get; set; }
+    public string? LinkedinUrl { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public bool IsDeleted { get; set; }

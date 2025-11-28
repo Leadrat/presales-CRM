@@ -34,6 +34,13 @@ namespace Api.Migrations
                     b.Property<Guid>("AccountTypeId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AssignedToUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("CompanyName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -50,17 +57,54 @@ namespace Api.Migrations
                     b.Property<Guid>("CurrentCrmId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("DealStage")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DecisionMakers")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("InstagramUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LeadSource")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LinkedinUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("NumberOfUsers")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WebsiteUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AccountSizeId");
 
                     b.HasIndex("AccountTypeId");
+
+                    b.HasIndex("AssignedToUserId");
 
                     b.HasIndex("CreatedByUserId");
 
@@ -244,20 +288,38 @@ namespace Api.Migrations
                     b.Property<Guid>("AccountId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("City")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("DateOfBirth")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Designation")
+                        .HasColumnType("text");
+
                     b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InstagramUrl")
                         .HasColumnType("text");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LinkedinUrl")
+                        .HasColumnType("text");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PersonalPhone")
                         .HasColumnType("text");
 
                     b.Property<string>("Phone")
@@ -268,6 +330,9 @@ namespace Api.Migrations
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WorkPhone")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -294,6 +359,55 @@ namespace Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("CrmProviders", (string)null);
+                });
+
+            modelBuilder.Entity("Api.Models.Demo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Attendees")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DemoAlignedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DemoDoneByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DoneAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("DemoAlignedByUserId");
+
+                    b.HasIndex("DemoDoneByUserId");
+
+                    b.HasIndex("ScheduledAt");
+
+                    b.ToTable("Demos", (string)null);
                 });
 
             modelBuilder.Entity("Api.Models.Note", b =>
@@ -493,6 +607,10 @@ namespace Api.Migrations
                     b.Property<Guid?>("RoleId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ThemePreference")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -517,6 +635,10 @@ namespace Api.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Api.Models.User", "AssignedToUser")
+                        .WithMany()
+                        .HasForeignKey("AssignedToUserId");
+
                     b.HasOne("Api.Models.User", "CreatedByUser")
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
@@ -532,6 +654,8 @@ namespace Api.Migrations
                     b.Navigation("AccountSize");
 
                     b.Navigation("AccountType");
+
+                    b.Navigation("AssignedToUser");
 
                     b.Navigation("CreatedByUser");
 
@@ -590,6 +714,32 @@ namespace Api.Migrations
                     b.Navigation("Account");
 
                     b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("Api.Models.Demo", b =>
+                {
+                    b.HasOne("Api.Models.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Api.Models.User", "DemoAlignedByUser")
+                        .WithMany()
+                        .HasForeignKey("DemoAlignedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Api.Models.User", "DemoDoneByUser")
+                        .WithMany()
+                        .HasForeignKey("DemoDoneByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Account");
+
+                    b.Navigation("DemoAlignedByUser");
+
+                    b.Navigation("DemoDoneByUser");
                 });
 
             modelBuilder.Entity("Api.Models.Opportunity", b =>

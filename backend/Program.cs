@@ -84,6 +84,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddScoped<ActivityLogService>();
+builder.Services.AddScoped<ThemePreferenceService>();
 builder.Services.AddScoped<IPasswordHasher<Api.Models.User>, PasswordHasher<Api.Models.User>>();
 builder.Services.Configure<SignupOptions>(configuration.GetSection("Signup"));
 

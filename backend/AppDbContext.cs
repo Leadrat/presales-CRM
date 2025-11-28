@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<Opportunity> Opportunities => Set<Opportunity>();
     public DbSet<OpportunityStage> OpportunityStages => Set<OpportunityStage>();
     public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<Demo> Demos => Set<Demo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +35,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.PasswordHash).IsRequired().HasMaxLength(255);
             e.Property(x => x.FullName).HasMaxLength(100);
             e.Property(x => x.Phone).HasMaxLength(15);
+            e.Property(x => x.ThemePreference).HasMaxLength(20);
             e.HasOne<Role>().WithMany().HasForeignKey(x => x.RoleId);
         });
 
@@ -234,6 +236,37 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.CreatedByUserId);
             e.HasIndex(x => x.ActivityTypeId);
             e.HasIndex(x => x.StatusId);
+        });
+
+        modelBuilder.Entity<Demo>(e =>
+        {
+            e.ToTable("Demos");
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.ScheduledAt).IsRequired();
+            e.Property(x => x.CreatedAt).IsRequired();
+            e.Property(x => x.UpdatedAt).IsRequired();
+            e.Property(x => x.IsDeleted).IsRequired();
+
+            e.HasOne(x => x.Account)
+                .WithMany()
+                .HasForeignKey(x => x.AccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.DemoAlignedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.DemoAlignedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.DemoDoneByUser)
+                .WithMany()
+                .HasForeignKey(x => x.DemoDoneByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(x => x.AccountId);
+            e.HasIndex(x => x.DemoAlignedByUserId);
+            e.HasIndex(x => x.DemoDoneByUserId);
+            e.HasIndex(x => x.ScheduledAt);
         });
 
         modelBuilder.Entity<OpportunityStage>(e =>

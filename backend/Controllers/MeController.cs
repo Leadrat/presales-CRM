@@ -33,6 +33,7 @@ public class MeController : ControllerBase
             {
                 u.Id,
                 u.Email,
+                u.FullName,
                 Role = _db.Roles.Where(r => r.Id == u.RoleId).Select(r => r.Name).FirstOrDefault() ?? "Basic"
             })
             .FirstOrDefaultAsync();
@@ -42,6 +43,6 @@ public class MeController : ControllerBase
             return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "Not authorized" } });
         }
 
-        return Ok(new { data = new { id = user.Id, email = user.Email, role = user.Role } });
+        return Ok(new { data = new { id = user.Id, email = user.Email, fullName = user.FullName, role = user.Role } });
     }
 }

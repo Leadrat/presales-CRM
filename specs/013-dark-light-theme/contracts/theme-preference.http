@@ -1,0 +1,14 @@
+# Theme Preference API Contracts – Spec 013
+
+### Get current user theme preference
+GET /api/theme-preference
+Authorization: Bearer <token>
+
+### Set/update current user theme preference
+PUT /api/theme-preference
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "theme": "light" | "dark"
+}

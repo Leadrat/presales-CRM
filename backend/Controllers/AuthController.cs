@@ -86,7 +86,7 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
         await _activity.LogAsync(user.Id, "Auth", user.Id, "Authenticated", "Login success", TryCorrelationId());
 
-        var userDto = new { id = user.Id, email = user.Email, role = roleName };
+        var userDto = new { id = user.Id, email = user.Email, fullName = user.FullName, role = roleName };
         return Ok(new { data = new LoginResponse(accessToken, refreshTokenRaw, userDto) });
     }
 
