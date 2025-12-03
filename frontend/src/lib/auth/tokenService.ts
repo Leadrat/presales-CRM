@@ -5,8 +5,20 @@ let refreshToken: string | null = null;
 let refreshTimeoutId: number | null = null;
 let broadcastChannel: BroadcastChannel | null = null;
 
+// Get basePath from Next.js config (injected at build time)
+const basePath = process.env.__NEXT_ROUTER_BASEPATH || "";
+
 function isBrowser() {
   return typeof window !== "undefined";
+}
+
+function getLoginPath() {
+  return `${basePath}/login`;
+}
+
+function isOnLoginPage() {
+  if (!isBrowser()) return false;
+  return window.location.pathname.endsWith("/login");
 }
 
 function getBroadcastChannel() {
@@ -17,8 +29,8 @@ function getBroadcastChannel() {
     broadcastChannel.onmessage = (event: MessageEvent) => {
       if (event.data === "logout") {
         tokenService.clearTokens();
-        if (window.location.pathname !== "/login") {
-          window.location.href = "/login";
+        if (!isOnLoginPage()) {
+          window.location.href = getLoginPath();
         }
       }
     };
@@ -49,8 +61,8 @@ function scheduleProactiveRefresh() {
     refreshTimeoutId = window.setTimeout(() => {
       tokenService.refreshTokens().catch(() => {
         tokenService.clearTokens();
-        if (isBrowser() && window.location.pathname !== "/login") {
-          window.location.href = "/login";
+        if (isBrowser() && !isOnLoginPage()) {
+          window.location.href = getLoginPath();
         }
       });
     }, delay);
@@ -75,7 +87,7 @@ export const tokenService = {
       throw new Error("No refresh token available");
     }
 
-    const res = await fetch("/api/auth/refresh", {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
@@ -137,8 +149,8 @@ export const tokenService = {
         bc.postMessage("logout");
       }
       this.clearTokens();
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+      if (!isOnLoginPage()) {
+        window.location.href = getLoginPath();
       }
     }
   },

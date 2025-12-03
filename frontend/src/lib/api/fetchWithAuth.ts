@@ -4,6 +4,9 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+// Get basePath from Next.js config (injected at build time)
+const basePath = process.env.__NEXT_ROUTER_BASEPATH || "";
+
 export async function fetchWithAuth(input: string, init: RequestInit = {}) {
   const originalInit: RequestInit = { ...init };
 
@@ -34,9 +37,10 @@ export async function fetchWithAuth(input: string, init: RequestInit = {}) {
     await tokenService.refreshTokens();
   } catch {
     tokenService.clearTokens();
-    if (isBrowser() && window.location.pathname !== "/login") {
+    const loginPath = `${basePath}/login`;
+    if (isBrowser() && !window.location.pathname.endsWith("/login")) {
       // Redirect to login; toast can be handled at page level
-      window.location.href = "/login";
+      window.location.href = loginPath;
     }
     // Re-throw to let callers handle error if needed
     throw new Error("Unauthorized");
