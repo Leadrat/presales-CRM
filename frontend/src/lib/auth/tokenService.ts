@@ -5,15 +5,22 @@ let refreshToken: string | null = null;
 let refreshTimeoutId: number | null = null;
 let broadcastChannel: BroadcastChannel | null = null;
 
-// Get basePath from Next.js config (injected at build time)
-const basePath = process.env.__NEXT_ROUTER_BASEPATH || "";
-
 function isBrowser() {
   return typeof window !== "undefined";
 }
 
+// Detect basePath from current URL pathname
+function getBasePath(): string {
+  if (!isBrowser()) return "";
+  const pathname = window.location.pathname;
+  if (pathname.startsWith("/presales")) {
+    return "/presales";
+  }
+  return "";
+}
+
 function getLoginPath() {
-  return `${basePath}/login`;
+  return `${getBasePath()}/login`;
 }
 
 function isOnLoginPage() {

@@ -4,45 +4,36 @@ const { chromium } = require('@playwright/test');
   const browser = await chromium.launch({ headless: false });
   const page = await browser.newPage();
 
-  // Track all redirects
-  const redirects = [];
-  page.on('response', response => {
-    const status = response.status();
-    if (status >= 300 && status < 400) {
-      redirects.push({
-        url: response.url(),
-        status: status,
-        location: response.headers()['location']
-      });
-    }
+  console.log('Testing login flow...');
+
+  // Navigate to login page
+  await page.goto('http://148.113.37.231/presales/login', {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000
   });
+  await page.waitForTimeout(2000);
 
-  // Check for any console messages
-  page.on('console', msg => {
-    console.log(`Console [${msg.type()}]:`, msg.text());
-  });
+  console.log('Current URL:', page.url());
 
-  console.log('Navigating to presales login page...');
+  // Fill in credentials
+  await page.fill('input[type="email"]', 'shashank@leadrat.com');
+  await page.fill('input[type="password"]', 'Shashank@12');
 
-  try {
-    await page.goto('http://148.113.37.231/presales/login', {
-      waitUntil: 'networkidle',
-      timeout: 30000
-    });
-  } catch (e) {
-    console.log('Navigation error:', e.message);
-  }
+  // Take screenshot before login
+  await page.screenshot({ path: 'presales-before-login.png' });
+  console.log('Screenshot saved to presales-before-login.png');
 
-  console.log('Final URL:', page.url());
-  console.log('Page title:', await page.title());
-  console.log('Redirects:', JSON.stringify(redirects, null, 2));
+  // Click sign in button
+  await page.click('button:has-text("Sign in")');
 
-  // Take screenshot
-  await page.screenshot({ path: 'presales-screenshot.png' });
-  console.log('Screenshot saved to presales-screenshot.png');
-
-  // Wait a bit more
+  // Wait for navigation after login
   await page.waitForTimeout(3000);
+
+  console.log('After login URL:', page.url());
+
+  // Take screenshot after login
+  await page.screenshot({ path: 'presales-after-login.png' });
+  console.log('Screenshot saved to presales-after-login.png');
 
   await browser.close();
   console.log('Test completed!');
