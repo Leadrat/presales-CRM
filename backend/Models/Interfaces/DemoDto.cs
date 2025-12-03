@@ -10,6 +10,11 @@ public class DemoDto
     public DateTimeOffset ScheduledAt { get; set; }
     public DateTimeOffset? DoneAt { get; set; }
 
+    /// <summary>
+    /// Demo status: Scheduled, Completed, Cancelled, NoShow
+    /// </summary>
+    public string Status { get; set; } = "Scheduled";
+
     public Guid DemoAlignedByUserId { get; set; }
     public string? DemoAlignedByName { get; set; }
 

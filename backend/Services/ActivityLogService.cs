@@ -107,7 +107,9 @@ public class ActivityLogService
                 Description = x.log.Message,
                 Timestamp = x.log.CreatedAt,
                 ActorId = x.log.ActorUserId,
-                ActorName = x.user != null ? x.user.FullName : "System",
+                ActorName = string.IsNullOrWhiteSpace(x.user?.FullName)
+                    ? (string.IsNullOrWhiteSpace(x.user?.Email) ? "System" : x.user!.Email)
+                    : x.user!.FullName,
                 RelatedEntityType = x.log.EntityType,
                 RelatedEntityId = x.log.EntityId
             })
@@ -249,5 +251,11 @@ public class ActivityLogService
     {
         var message = "Demo cancelled";
         return LogAsync(actorUserId, "Account", accountId, "DEMO_CANCELLED", message, correlationId);
+    }
+
+    public Task LogDemoDeletedAsync(Guid actorUserId, Guid accountId, Guid demoId, Guid? correlationId = null)
+    {
+        var message = "Demo deleted";
+        return LogAsync(actorUserId, "Account", accountId, "DEMO_DELETED", message, correlationId);
     }
 }

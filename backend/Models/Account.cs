@@ -23,6 +23,8 @@ public class Account
     public Guid CurrentCrmId { get; set; }
     public DateTimeOffset CrmExpiry { get; set; }
 
+    public DateTimeOffset? ClosedDate { get; set; }
+
     // Spec 014: basic pipeline metadata
     public string LeadSource { get; set; } = string.Empty;
     public string DealStage { get; set; } = string.Empty;

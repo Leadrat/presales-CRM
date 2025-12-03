@@ -38,6 +38,34 @@ public class AccountsController : ControllerBase
         _activity = activity;
     }
 
+    /// <summary>
+    /// Admin maintenance: Backfill ClosedDate for WON/LOST accounts that have null ClosedDate.
+    /// Uses UpdatedAt as the fallback date; if null, uses UtcNow.
+    /// </summary>
+    [HttpPost("maintenance/backfill-closed-date")]
+    public async Task<ActionResult<object>> BackfillClosedDate()
+    {
+        if (!_current.IsAuthenticated || _current.UserId is null)
+        {
+            return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "Not authenticated" } });
+        }
+
+        var role = _current.Role ?? "Basic";
+        if (!string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "Only admins can run maintenance" } });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var affected = await _db.Accounts
+            .Where(a => !a.IsDeleted && (a.DealStage == "WON" || a.DealStage == "LOST") && a.ClosedDate == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.ClosedDate, a => a.UpdatedAt != default ? a.UpdatedAt : now)
+                .SetProperty(a => a.UpdatedAt, _ => now));
+
+        return Ok(new { data = new { updated = affected } });
+    }
+
     public record AccountCreateRequest(
         string CompanyName,
         string? Website,
@@ -70,6 +98,7 @@ public class AccountsController : ControllerBase
         string? CrmExpiry,
         string? LeadSource,
         string? DealStage,
+        string? ClosedDate,
         // New enriched profile fields (optional for backward compatibility)
         string? DecisionMakers,
         string? InstagramUrl,
@@ -107,8 +136,9 @@ public class AccountsController : ControllerBase
 
     public record DemoCreateRequest(
         DateTimeOffset ScheduledAt,
-        DateTimeOffset? DoneAt,
         Guid DemoAlignedByUserId,
+        string? Status,        // Optional, defaults to "Scheduled"
+        DateTimeOffset? DoneAt,
         Guid? DemoDoneByUserId,
         string? Attendees,
         string? Notes
@@ -116,9 +146,13 @@ public class AccountsController : ControllerBase
 
     public record DemoUpdateRequest(
         DateTimeOffset? ScheduledAt,
+        string? Status,        // Scheduled, Completed, Cancelled, NoShow
         DateTimeOffset? DoneAt,
+        Guid? DemoDoneByUserId,
         string? Attendees,
-        string? Notes
+        string? Notes,
+        string? CompletionAttendees,
+        string? CompletionNotes
     );
 
     // List accounts for current user
@@ -412,6 +446,95 @@ public class AccountsController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Maintenance: Hard delete sample/demo accounts like "Alice Example", "Bob Example", and "Basic Account".
+    /// Admin only. Irreversible.
+    /// </summary>
+    [HttpPost("cleanup-samples")]
+    public async Task<ActionResult<object>> HardDeleteSampleAccounts()
+    {
+        if (!_current.IsAuthenticated || _current.UserId is null)
+        {
+            return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "Not authenticated" } });
+        }
+
+        var role = _current.Role ?? "Basic";
+        if (!string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "Only admins can perform maintenance deletes" } });
+        }
+
+        // Match company names that contain these token pairs (case-insensitive)
+        string[] tokenA1 = new[] { "alice", "example" };
+        string[] tokenA2 = new[] { "bob", "example" };
+        string[] tokenA3 = new[] { "basic", "account" };
+
+        var candidates = await _db.Accounts
+            .Where(a => !a.IsDeleted)
+            .Select(a => new { a.Id, a.CompanyName })
+            .ToListAsync();
+
+        bool ContainsAllTokens(string name, string[] tokens)
+        {
+            var lower = (name ?? string.Empty).ToLowerInvariant();
+            foreach (var t in tokens)
+            {
+                if (!lower.Contains(t)) return false;
+            }
+            return true;
+        }
+
+        var targetIds = candidates
+            .Where(a => ContainsAllTokens(a.CompanyName, tokenA1)
+                        || ContainsAllTokens(a.CompanyName, tokenA2)
+                        || ContainsAllTokens(a.CompanyName, tokenA3))
+            .Select(a => a.Id)
+            .ToList();
+
+        if (targetIds.Count == 0)
+        {
+            return Ok(new { data = new { accountsDeleted = 0, contactsDeleted = 0, demosDeleted = 0, notesDeleted = 0, activitiesDeleted = 0, opportunitiesDeleted = 0 } });
+        }
+
+        // Delete children first to satisfy FK constraints
+        var contacts = await _db.Contacts.Where(c => targetIds.Contains(c.AccountId)).ToListAsync();
+        var demos = await _db.Demos.Where(d => targetIds.Contains(d.AccountId)).ToListAsync();
+        var notes = await _db.Notes.Where(n => targetIds.Contains(n.AccountId)).ToListAsync();
+        var activities = await _db.Activities.Where(ac => targetIds.Contains(ac.AccountId)).ToListAsync();
+        var opportunities = await _db.Opportunities.Where(o => targetIds.Contains(o.AccountId)).ToListAsync();
+
+        int contactsDeleted = contacts.Count;
+        int demosDeleted = demos.Count;
+        int notesDeleted = notes.Count;
+        int activitiesDeleted = activities.Count;
+        int opportunitiesDeleted = opportunities.Count;
+
+        _db.Contacts.RemoveRange(contacts);
+        _db.Demos.RemoveRange(demos);
+        _db.Notes.RemoveRange(notes);
+        _db.Activities.RemoveRange(activities);
+        _db.Opportunities.RemoveRange(opportunities);
+
+        var accounts = await _db.Accounts.Where(a => targetIds.Contains(a.Id)).ToListAsync();
+        int accountsDeleted = accounts.Count;
+        _db.Accounts.RemoveRange(accounts);
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            data = new
+            {
+                accountsDeleted,
+                contactsDeleted,
+                demosDeleted,
+                notesDeleted,
+                activitiesDeleted,
+                opportunitiesDeleted
+            }
+        });
+    }
+
     [HttpPost("{id:guid}/demos")]
     public async Task<ActionResult<object>> CreateDemo(Guid id, [FromBody] DemoCreateRequest request)
     {
@@ -435,6 +558,13 @@ public class AccountsController : ControllerBase
             return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "You are not allowed to modify this account" } });
         }
 
+        // Validate status if provided
+        var status = string.IsNullOrWhiteSpace(request.Status) ? DemoStatus.Scheduled : request.Status.Trim();
+        if (!DemoStatus.IsValid(status))
+        {
+            return BadRequest(new { error = new { code = "INVALID_STATUS", message = "Status must be one of: Scheduled, Completed, Cancelled, NoShow" } });
+        }
+
         var now = DateTimeOffset.UtcNow;
 
         var demo = new Demo
@@ -445,6 +575,7 @@ public class AccountsController : ControllerBase
             DemoDoneByUserId = request.DemoDoneByUserId,
             ScheduledAt = request.ScheduledAt,
             DoneAt = request.DoneAt,
+            Status = status,
             Attendees = string.IsNullOrWhiteSpace(request.Attendees) ? null : request.Attendees.Trim(),
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             CreatedAt = now,
@@ -471,6 +602,7 @@ public class AccountsController : ControllerBase
                 AccountId = d.AccountId,
                 ScheduledAt = d.ScheduledAt,
                 DoneAt = d.DoneAt,
+                Status = d.Status,
                 DemoAlignedByUserId = d.DemoAlignedByUserId,
                 DemoAlignedByName = d.DemoAlignedByUser != null ? d.DemoAlignedByUser.FullName : null,
                 DemoDoneByUserId = d.DemoDoneByUserId,
@@ -513,6 +645,7 @@ public class AccountsController : ControllerBase
                 AccountId = d.AccountId,
                 ScheduledAt = d.ScheduledAt,
                 DoneAt = d.DoneAt,
+                Status = d.Status,
                 DemoAlignedByUserId = d.DemoAlignedByUserId,
                 DemoAlignedByName = d.DemoAlignedByUser != null ? d.DemoAlignedByUser.FullName : null,
                 DemoDoneByUserId = d.DemoDoneByUserId,
@@ -545,7 +678,7 @@ public class AccountsController : ControllerBase
 
         var role = _current.Role ?? "Basic";
         if (!string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-            && account.CreatedByUserId != _current.UserId)
+            && account.AssignedToUserId != _current.UserId)
         {
             return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "You are not allowed to modify this account" } });
         }
@@ -557,21 +690,96 @@ public class AccountsController : ControllerBase
             return NotFound(new { error = new { code = "DEMO_NOT_FOUND", message = "Demo not found" } });
         }
 
-        var originalScheduledAt = demo.ScheduledAt;
-        var originalDoneAt = demo.DoneAt;
+        var originalStatus = demo.Status;
+        string? requestedStatus = null;
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            if (!DemoStatus.IsValid(request.Status))
+            {
+                return BadRequest(new { error = new { code = "INVALID_STATUS", message = "Status must be one of: Scheduled, Completed, Cancelled, NoShow" } });
+            }
+
+            requestedStatus = request.Status.Trim();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        if (requestedStatus == DemoStatus.Completed && originalStatus == DemoStatus.Scheduled)
+        {
+            var completedDemo = new Demo
+            {
+                Id = Guid.NewGuid(),
+                AccountId = demo.AccountId,
+                DemoAlignedByUserId = demo.DemoAlignedByUserId,
+                DemoDoneByUserId = request.DemoDoneByUserId ?? _current.UserId ?? demo.DemoAlignedByUserId,
+                ScheduledAt = demo.ScheduledAt,
+                DoneAt = request.DoneAt ?? now,
+                Status = DemoStatus.Completed,
+                Attendees = string.IsNullOrWhiteSpace(request.CompletionAttendees) ? null : request.CompletionAttendees.Trim(),
+                Notes = string.IsNullOrWhiteSpace(request.CompletionNotes) ? null : request.CompletionNotes.Trim(),
+                CreatedAt = now,
+                UpdatedAt = now,
+                IsDeleted = false
+            };
+
+            _db.Demos.Add(completedDemo);
+            await _db.SaveChangesAsync();
+
+            if (_current.UserId is Guid actorUserId)
+            {
+                await _activity.LogDemoCompletedAsync(actorUserId, account.Id, completedDemo.Id, completedDemo.DoneAt, demo.ScheduledAt);
+            }
+
+            var dto = await _db.Demos
+                .AsNoTracking()
+                .Where(d => d.Id == completedDemo.Id)
+                .Select(d => new DemoDto
+                {
+                    Id = d.Id,
+                    AccountId = d.AccountId,
+                    ScheduledAt = d.ScheduledAt,
+                    DoneAt = d.DoneAt,
+                    Status = d.Status,
+                    DemoAlignedByUserId = d.DemoAlignedByUserId,
+                    DemoAlignedByName = d.DemoAlignedByUser != null ? d.DemoAlignedByUser.FullName : null,
+                    DemoDoneByUserId = d.DemoDoneByUserId,
+                    DemoDoneByName = d.DemoDoneByUser != null ? d.DemoDoneByUser.FullName : null,
+                    Attendees = d.Attendees,
+                    Notes = d.Notes,
+                    CreatedAt = d.CreatedAt,
+                    UpdatedAt = d.UpdatedAt
+                })
+                .FirstAsync();
+
+            return Ok(new { data = dto });
+        }
 
         if (request.ScheduledAt.HasValue)
         {
             demo.ScheduledAt = request.ScheduledAt.Value;
         }
 
+        if (requestedStatus is not null)
+        {
+            demo.Status = requestedStatus;
+        }
+
         if (request.DoneAt.HasValue)
         {
             demo.DoneAt = request.DoneAt;
-            if (_current.UserId is Guid currentUserId)
-            {
-                demo.DemoDoneByUserId = currentUserId;
-            }
+        }
+        else if (requestedStatus == DemoStatus.Completed && demo.DoneAt is null)
+        {
+            demo.DoneAt = now;
+        }
+
+        if (request.DemoDoneByUserId.HasValue)
+        {
+            demo.DemoDoneByUserId = request.DemoDoneByUserId;
+        }
+        else if (demo.Status == DemoStatus.Completed && demo.DemoDoneByUserId is null)
+        {
+            demo.DemoDoneByUserId = _current.UserId ?? demo.DemoAlignedByUserId;
         }
 
         if (request.Attendees is not null)
@@ -584,45 +792,44 @@ public class AccountsController : ControllerBase
             demo.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
         }
 
-        demo.UpdatedAt = DateTimeOffset.UtcNow;
+        demo.UpdatedAt = now;
 
         await _db.SaveChangesAsync();
 
-        // Log demo lifecycle activity (User Story 3)
-        if (_current.UserId is Guid actorUserId)
+        if (_current.UserId is Guid actorUserId2)
         {
-            if (request.DoneAt.HasValue && demo.DoneAt != originalDoneAt)
+            if (requestedStatus == DemoStatus.Completed && originalStatus != DemoStatus.Completed)
             {
-                await _activity.LogDemoCompletedAsync(actorUserId, account.Id, demo.Id, demo.DoneAt, originalScheduledAt);
+                await _activity.LogDemoCompletedAsync(actorUserId2, account.Id, demo.Id, demo.DoneAt, demo.ScheduledAt);
+            }
+            else if (requestedStatus == DemoStatus.Cancelled && originalStatus != DemoStatus.Cancelled)
+            {
+                await _activity.LogDemoCancelledAsync(actorUserId2, account.Id, demo.Id);
             }
             else
             {
-                await _activity.LogDemoUpdatedAsync(actorUserId, account.Id, demo.Id);
+                await _activity.LogDemoUpdatedAsync(actorUserId2, account.Id, demo.Id);
             }
         }
 
-        // Reload as a DemoDto using the same projection as GetDemos
-        var dto = await _db.Demos
-            .AsNoTracking()
-            .Where(d => d.Id == demo.Id)
-            .Select(d => new DemoDto
-            {
-                Id = d.Id,
-                AccountId = d.AccountId,
-                ScheduledAt = d.ScheduledAt,
-                DoneAt = d.DoneAt,
-                DemoAlignedByUserId = d.DemoAlignedByUserId,
-                DemoAlignedByName = d.DemoAlignedByUser != null ? d.DemoAlignedByUser.FullName : null,
-                DemoDoneByUserId = d.DemoDoneByUserId,
-                DemoDoneByName = d.DemoDoneByUser != null ? d.DemoDoneByUser.FullName : null,
-                Attendees = d.Attendees,
-                Notes = d.Notes,
-                CreatedAt = d.CreatedAt,
-                UpdatedAt = d.UpdatedAt
-            })
-            .FirstAsync();
+        var response = new DemoDto
+        {
+            Id = demo.Id,
+            AccountId = demo.AccountId,
+            ScheduledAt = demo.ScheduledAt,
+            DoneAt = demo.DoneAt,
+            Status = demo.Status,
+            DemoAlignedByUserId = demo.DemoAlignedByUserId,
+            DemoAlignedByName = demo.DemoAlignedByUser?.FullName,
+            DemoDoneByUserId = demo.DemoDoneByUserId,
+            DemoDoneByName = demo.DemoDoneByUser?.FullName,
+            Attendees = demo.Attendees,
+            Notes = demo.Notes,
+            CreatedAt = demo.CreatedAt,
+            UpdatedAt = demo.UpdatedAt
+        };
 
-        return Ok(new { data = dto });
+        return Ok(new { data = response });
     }
 
     [HttpDelete("{accountId:guid}/demos/{demoId:guid}")]
@@ -633,19 +840,11 @@ public class AccountsController : ControllerBase
             return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "Not authenticated" } });
         }
 
-        var account = await _db.Accounts
-            .FirstOrDefaultAsync(a => a.Id == accountId && !a.IsDeleted);
+        var account = await _db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId && !a.IsDeleted);
 
         if (account == null)
         {
             return NotFound(new { error = new { code = "ACCOUNT_NOT_FOUND", message = "Account not found" } });
-        }
-
-        var role = _current.Role ?? "Basic";
-        if (!string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-            && account.CreatedByUserId != _current.UserId)
-        {
-            return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "You are not allowed to modify this account" } });
         }
 
         var demo = await _db.Demos.FirstOrDefaultAsync(d => d.Id == demoId && d.AccountId == accountId && !d.IsDeleted);
@@ -655,15 +854,20 @@ public class AccountsController : ControllerBase
             return NotFound(new { error = new { code = "DEMO_NOT_FOUND", message = "Demo not found" } });
         }
 
+        var role = _current.Role ?? "Basic";
+        if (!string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) && demo.DemoAlignedByUserId != _current.UserId)
+        {
+            return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "You are not allowed to delete this demo" } });
+        }
+
         demo.IsDeleted = true;
         demo.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync();
 
-        // Log demo cancelled activity (User Story 3)
         if (_current.UserId is Guid actorUserId)
         {
-            await _activity.LogDemoCancelledAsync(actorUserId, account.Id, demo.Id);
+            await _activity.LogDemoDeletedAsync(actorUserId, account.Id, demo.Id);
         }
 
         return NoContent();
@@ -747,6 +951,7 @@ public class AccountsController : ControllerBase
             CrmExpiry = account.CrmExpiry,
             LeadSource = account.LeadSource,
             DealStage = account.DealStage,
+            ClosedDate = account.ClosedDate,
             CreatedAt = account.CreatedAt,
             ContactCount = contactCount,
             DemoCount = demoCount,
@@ -850,6 +1055,45 @@ public class AccountsController : ControllerBase
         if (dealStage is not null)
         {
             account.DealStage = dealStage;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ClosedDate))
+        {
+            if (DateTimeOffset.TryParse(request.ClosedDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var closed))
+            {
+                account.ClosedDate = closed.ToUniversalTime();
+            }
+            else
+            {
+                return BadRequest(new { error = new { code = "INVALID_CLOSED_DATE", message = "ClosedDate must be a valid date value" } });
+            }
+        }
+        else if (request.ClosedDate == string.Empty)
+        {
+            account.ClosedDate = null;
+        }
+
+        // Auto-manage ClosedDate if DealStage changed and ClosedDate was not explicitly provided
+        if (dealStage is not null && !string.Equals(originalDealStage, account.DealStage, StringComparison.OrdinalIgnoreCase)
+            && request.ClosedDate is null)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var stage = account.DealStage?.Trim().ToUpperInvariant();
+            if (stage == "WON" || stage == "LOST")
+            {
+                if (account.ClosedDate is null)
+                {
+                    account.ClosedDate = now;
+                }
+            }
+            else
+            {
+                // If moving away from a closed stage, clear ClosedDate unless caller explicitly set it
+                if (account.ClosedDate is not null)
+                {
+                    account.ClosedDate = null;
+                }
+            }
         }
 
         // Allow both Admin and Basic users (if they can edit the account at all) to change CreatedBy and AssignedTo
@@ -1405,20 +1649,23 @@ public class AccountsController : ControllerBase
             return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "Not authenticated" } });
         }
 
-        // Global counts across all non-deleted accounts and demos
+        // Global counts across all non-deleted accounts and demos.
+        // Demos that belong to soft-deleted accounts are also ignored.
         var totalAccounts = await _db.Accounts
             .AsNoTracking()
             .Where(a => !a.IsDeleted)
             .CountAsync();
 
-        var totalDemos = await _db.Demos
+        // Count demos by status, excluding demos that are deleted themselves
+        // AND demos whose parent account has been soft-deleted.
+        var demosScheduled = await _db.Demos
             .AsNoTracking()
-            .Where(d => !d.IsDeleted)
+            .Where(d => !d.IsDeleted && d.Status == DemoStatus.Scheduled && d.Account != null && !d.Account.IsDeleted)
             .CountAsync();
 
-        var totalCompletedDemos = await _db.Demos
+        var demosCompleted = await _db.Demos
             .AsNoTracking()
-            .Where(d => !d.IsDeleted && d.DoneAt != null)
+            .Where(d => !d.IsDeleted && d.Status == DemoStatus.Completed && d.Account != null && !d.Account.IsDeleted)
             .CountAsync();
 
         return Ok(new
@@ -1426,8 +1673,8 @@ public class AccountsController : ControllerBase
             data = new
             {
                 totalAccountsCreated = totalAccounts,
-                demosScheduled = totalDemos,
-                demosCompleted = totalCompletedDemos
+                demosScheduled = demosScheduled,
+                demosCompleted = demosCompleted
             }
         });
     }

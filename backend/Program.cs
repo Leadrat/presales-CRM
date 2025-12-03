@@ -11,7 +11,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Api.Authorization;
 using Api.Authorization.Requirements;
+using dotenv.net;
 
+DotEnv.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 // Configuration
@@ -71,10 +73,11 @@ builder.Services.AddScoped<IAuthorizationHandler, Api.Authorization.Handlers.Own
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, Api.Authorization.CustomAuthorizationResultHandler>();
 
 // CORS for frontend
+var frontendOrigin = configuration["FRONTEND_ORIGIN"] ?? "http://localhost:3000";
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
-        policy.WithOrigins("http://localhost:3000")
+        policy.WithOrigins(frontendOrigin)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials());
@@ -100,6 +103,31 @@ app.UseHttpsRedirection();
 app.UseMiddleware<Api.Middleware.CorrelationIdMiddleware>();
 app.UseCors("Frontend");
 app.UseAuthentication();
+
+// Guard: block inactive or deleted users from all authenticated requests
+app.Use(async (context, next) =>
+{
+    if (context.User?.Identity?.IsAuthenticated == true)
+    {
+        var userIdStr = context.User.FindFirst("sub")?.Value
+            ?? context.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+        if (Guid.TryParse(userIdStr, out var userId))
+        {
+            using var scope = context.RequestServices.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var active = await db.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Id == userId && u.IsActive && !u.IsDeleted);
+            if (!active)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new { error = new { code = "USER_INACTIVE", message = "User is inactive" } });
+                return;
+            }
+        }
+    }
+    await next();
+});
 app.UseAuthorization();
 
 
