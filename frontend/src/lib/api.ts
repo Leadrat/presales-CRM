@@ -1,6 +1,6 @@
 import { fetchWithAuth } from "./api/fetchWithAuth";
 
-export const API_BASE = "http://localhost:5033";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5033";
 
 export async function signup(input: { fullName: string; email: string; password: string; phone?: string }) {
   const res = await fetch(`${API_BASE}/api/auth/signup`, {
