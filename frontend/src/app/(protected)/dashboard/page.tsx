@@ -2,8 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getDashboardSummary, getAnalyticsAccounts, getDemosBySize, AnalyticsAccountsSummary, DemosBySizeSummary } from "@/lib/api";
+import {
+  getDashboardSummary,
+  getAnalyticsAccounts,
+  getDemosBySize,
+  getTeamUsers,
+  AnalyticsAccountsSummary,
+  DemosBySizeSummary,
+  TeamUser,
+} from "@/lib/api";
 import { BoxCubeIcon, CalenderIcon, CheckCircleIcon, TimeIcon, ArrowUpIcon } from "@/icons";
+import { Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import DateTimePicker from "@/components/form/date-time-picker";
 
@@ -116,6 +125,10 @@ function BuildingGlyph({ className }: { className?: string }) {
   );
 }
 
+function SizeBucketGlyph({ className }: { className?: string }) {
+  return <Building2 className={className} />;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -138,6 +151,14 @@ export default function DashboardPage() {
   const [presetMenuOpen, setPresetMenuOpen] = useState(false);
   const presetMenuRef = useRef<HTMLDivElement | null>(null);
   const presetButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const isAdmin = user?.role === "Admin";
+
+  const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[] | null>(null);
+  const [userFilterOpen, setUserFilterOpen] = useState(false);
+  const [userFilterLoading, setUserFilterLoading] = useState<boolean>(false);
+  const [userFilterError, setUserFilterError] = useState<string | null>(null);
 
   // Detect "created" query param and trigger a one-time success toast
   useEffect(() => {
@@ -162,6 +183,94 @@ export default function DashboardPage() {
     };
   }, [showCreatedToast]);
 
+  // Admin-only: load team users and restore dashboard_user_filter from sessionStorage
+  useEffect(() => {
+    if (!isAdmin) {
+      setTeamUsers([]);
+      setSelectedUserIds(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUsersAndSelection = async () => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      setUserFilterLoading(true);
+      setUserFilterError(null);
+
+      let savedRaw: string | null = null;
+      try {
+        savedRaw = window.sessionStorage.getItem("dashboard_user_filter");
+      } catch {
+        savedRaw = null;
+      }
+
+      try {
+        const page = await getTeamUsers({ status: "active", pageSize: 500 });
+        if (cancelled) return;
+
+        const items = page.items ?? [];
+        setTeamUsers(items);
+
+        const activeIds = new Set(items.map((u) => u.id));
+
+        let nextSelection: string[] | null = null;
+
+        if (savedRaw && savedRaw !== "ALL") {
+          try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) {
+              const filtered = parsed.filter((id) => typeof id === "string" && activeIds.has(id));
+              if (filtered.length > 0) {
+                nextSelection = filtered;
+                try {
+                  window.sessionStorage.setItem("dashboard_user_filter", JSON.stringify(filtered));
+                } catch {
+                }
+              } else {
+                try {
+                  window.sessionStorage.setItem("dashboard_user_filter", "ALL");
+                } catch {
+                }
+              }
+            }
+          } catch {
+            try {
+              window.sessionStorage.setItem("dashboard_user_filter", "ALL");
+            } catch {
+            }
+          }
+        } else {
+          // First load of this session or explicit ALL – ensure key is set
+          try {
+            window.sessionStorage.setItem("dashboard_user_filter", "ALL");
+          } catch {
+          }
+        }
+
+        setSelectedUserIds(nextSelection);
+      } catch (err: any) {
+        if (cancelled) return;
+        setUserFilterError(err?.message || "Failed to load team members");
+        setTeamUsers([]);
+        setSelectedUserIds(null);
+      } finally {
+        if (!cancelled) {
+          setUserFilterLoading(false);
+        }
+      }
+    };
+
+    loadUsersAndSelection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -169,7 +278,18 @@ export default function DashboardPage() {
       setLoadingStats(true);
       setStatsError(null);
       try {
-        const summary = await getDashboardSummary();
+        let filterUserIds: string[] | null = null;
+        if (user?.id) {
+          if (isAdmin) {
+            filterUserIds = selectedUserIds && selectedUserIds.length > 0 ? selectedUserIds : null;
+          } else {
+            filterUserIds = [user.id];
+          }
+        }
+
+        const summary = await getDashboardSummary(
+          filterUserIds && filterUserIds.length > 0 ? { userIds: filterUserIds } : undefined,
+        );
         if (cancelled) return;
 
         // Global totals across all users (Admin and Basic see same counts)
@@ -194,9 +314,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
-
-  const isAdmin = user?.role === "Admin";
+  }, [user?.id, isAdmin, selectedUserIds]);
 
   // Load a simple global analytics snapshot for dashboard (no filters)
   useEffect(() => {
@@ -207,9 +325,25 @@ export default function DashboardPage() {
       setAnalyticsError(null);
 
       try {
+        let filterUserIds: string[] | null = null;
+        if (user?.id) {
+          if (isAdmin) {
+            filterUserIds = selectedUserIds && selectedUserIds.length > 0 ? selectedUserIds : null;
+          } else {
+            filterUserIds = [user.id];
+          }
+        }
+
         const [accounts, demosBySize] = await Promise.all([
-          getAnalyticsAccounts({ from: analyticsFrom || undefined, to: analyticsTo || undefined }),
-          getDemosBySize({ from: analyticsFrom || undefined, to: analyticsTo || undefined }),
+          getAnalyticsAccounts({
+            from: analyticsFrom || undefined,
+            to: analyticsTo || undefined,
+            userIds: filterUserIds && filterUserIds.length > 0 ? filterUserIds : null,
+          }),
+          // Demos by Account Size should always show lifetime data, independent of the date range
+          getDemosBySize({
+            userIds: filterUserIds && filterUserIds.length > 0 ? filterUserIds : null,
+          }),
         ]);
 
         if (cancelled) return;
@@ -233,7 +367,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [analyticsFrom, analyticsTo]);
+  }, [analyticsFrom, analyticsTo, isAdmin, selectedUserIds, user?.id]);
 
   useEffect(() => {
     const handleClickAway = (event: MouseEvent) => {
@@ -287,13 +421,6 @@ export default function DashboardPage() {
   };
 
   const demoBuckets = [
-    {
-      key: "little",
-      label: "Little (5-9 users)",
-      count: analyticsDemosBySize?.little ?? 0,
-      badgeBg: "bg-emerald-100/80 dark:bg-emerald-900/40",
-      badgeText: "text-emerald-600 dark:text-emerald-200",
-    },
     {
       key: "small",
       label: "Small (10-24 users)",
@@ -355,6 +482,57 @@ export default function DashboardPage() {
       ? Math.round((demosCompleted / demosScheduled) * 100)
       : 0;
 
+  const allTeamUserIds = teamUsers.map((u) => u.id);
+  const isAllTeamMembersSelected =
+    allTeamUserIds.length === 0 || !selectedUserIds || selectedUserIds.length === 0;
+
+  const persistUserFilter = (ids: string[] | null) => {
+    if (typeof window === "undefined") return;
+    try {
+      if (!ids || ids.length === 0) {
+        window.sessionStorage.setItem("dashboard_user_filter", "ALL");
+      } else {
+        window.sessionStorage.setItem("dashboard_user_filter", JSON.stringify(ids));
+      }
+    } catch {
+      // Best-effort only
+    }
+  };
+
+  const handleUserToggle = (userId: string) => {
+    if (!isAdmin || allTeamUserIds.length === 0) return;
+
+    const base = selectedUserIds && selectedUserIds.length > 0 ? [...selectedUserIds] : [...allTeamUserIds];
+    const index = base.indexOf(userId);
+    let next: string[] = [];
+
+    if (index >= 0) {
+      next = base.filter((id) => id !== userId);
+    } else {
+      next = [...base, userId];
+    }
+
+    if (next.length === 0 || next.length === allTeamUserIds.length) {
+      setSelectedUserIds(null);
+      persistUserFilter(null);
+    } else {
+      setSelectedUserIds(next);
+      persistUserFilter(next);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (!isAdmin) return;
+    setSelectedUserIds(null);
+    persistUserFilter(null);
+  };
+
+  const handleClearAll = () => {
+    if (!isAdmin) return;
+    setSelectedUserIds(null);
+    persistUserFilter(null);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 text-gray-900 dark:bg-[#020617] dark:text-gray-100 lg:px-8 lg:py-8">
       <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -377,6 +555,137 @@ export default function DashboardPage() {
 
         {/* Main content */}
         <div className="space-y-6">
+          {isAdmin && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-slate-900">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">View Dashboard For</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Filter these metrics by selected team members.</p>
+                </div>
+                <div className="w-full max-w-md">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      disabled={userFilterLoading || teamUsers.length === 0}
+                      onClick={() => setUserFilterOpen((prev) => !prev)}
+                      className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 text-left text-sm text-gray-900 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-1 focus:ring-brand-300 disabled:cursor-not-allowed disabled:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-brand-300"
+                    >
+                      <div className="flex min-w-0 flex-wrap gap-2">
+                        {isAllTeamMembersSelected || teamUsers.length === 0 ? (
+                          <span className="truncate text-gray-500 dark:text-gray-400">All team members</span>
+                        ) : (
+                          selectedUserIds?.slice(0, 3).map((id) => {
+                            const u = teamUsers.find((user) => user.id === id);
+                            if (!u) return null;
+                            const label = u.fullName || u.email;
+                            return (
+                              <span
+                                key={id}
+                                className="flex items-center rounded-full border border-transparent bg-gray-100 px-2.5 py-0.5 text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                              >
+                                <span className="max-w-[7rem] truncate">{label}</span>
+                              </span>
+                            );
+                          })
+                        )}
+                        {selectedUserIds && selectedUserIds.length > 3 && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">+{selectedUserIds.length - 3} more</span>
+                        )}
+                      </div>
+                      <svg
+                        className={`ml-2 h-4 w-4 text-gray-500 transition-transform dark:text-gray-400 ${userFilterOpen ? "rotate-180" : ""}`}
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M4.79175 7.39551L10.0001 12.6038L15.2084 7.39551"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+
+                    {userFilterOpen && (
+                      <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
+                        <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">
+                          <button
+                            type="button"
+                            disabled={teamUsers.length === 0}
+                            onClick={handleSelectAll}
+                            className="text-indigo-600 hover:text-indigo-700 disabled:text-gray-400 dark:text-indigo-300 dark:hover:text-indigo-200"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            type="button"
+                            disabled={teamUsers.length === 0}
+                            onClick={handleClearAll}
+                            className="text-gray-500 hover:text-gray-700 disabled:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          <ul className="divide-y divide-gray-100 text-sm dark:divide-gray-800">
+                            {teamUsers.map((u) => {
+                              const isChecked =
+                                isAllTeamMembersSelected || selectedUserIds?.includes(u.id);
+                              const label = u.fullName || u.email;
+                              return (
+                                <li key={u.id}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUserToggle(u.id)}
+                                    className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-slate-800"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`flex h-4 w-4 items-center justify-center rounded border ${
+                                          isChecked
+                                            ? "border-indigo-600 bg-indigo-600 text-white"
+                                            : "border-gray-300 bg-white text-transparent dark:border-gray-600 dark:bg-gray-900"
+                                        }`}
+                                      >
+                                        <svg
+                                          className="h-3 w-3"
+                                          viewBox="0 0 16 16"
+                                          fill="none"
+                                          xmlns="http://www.w3.org/2000/svg"
+                                        >
+                                          <path
+                                            d="M3.5 8.5L6.5 11.5L12.5 4.5"
+                                            stroke="currentColor"
+                                            strokeWidth="1.5"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          />
+                                        </svg>
+                                      </span>
+                                      <span className="truncate text-gray-800 dark:text-gray-100">{label}</span>
+                                    </div>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                            {teamUsers.length === 0 && !userFilterLoading && (
+                              <li className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">No active team members found.</li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {userFilterError && (
+                    <p className="mt-2 text-xs text-red-600 dark:text-red-400">{userFilterError}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Summary cards */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-5">
             {/* Total Accounts Created */}
@@ -549,29 +858,21 @@ export default function DashboardPage() {
                 <div className="flex items-start justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
                   <div>
                     <p className="text-base font-bold text-gray-900 dark:text-white">Demos by Account Size</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Count of demos grouped by the size of the account.
-                    </p>
                   </div>
                 </div>
-                <div className="divide-y divide-gray-100 pt-3 dark:divide-gray-800">
+                <div className="pt-4 space-y-5">
                   {demoBuckets.map((bucket) => (
-                    <div key={bucket.key} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${bucket.badgeBg} ${bucket.badgeText}`}>
-                        <BuildingGlyph className="h-6 w-6" />
+                    <div key={bucket.key} className="flex items-center gap-4">
+                      <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${bucket.badgeBg} ${bucket.badgeText}`}>
+                        <SizeBucketGlyph className="h-6 w-6" />
                       </div>
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-gray-900 dark:text-white">{bucket.label}</span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{formatDemoCount(bucket.count)}</span>
+                        <span className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{formatDemoCount(bucket.count)}</span>
                       </div>
                     </div>
                   ))}
                 </div>
-                {analyticsError && (
-                  <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                    Analytics data is temporarily unavailable; showing zeros.
-                  </p>
-                )}
               </div>
 
               {/* Placeholder column for future Recent Activity or other content */}

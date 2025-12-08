@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: presales-backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5033:5033"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Frontend will call the backend via the host port
+        NEXT_PUBLIC_API_BASE_URL: "http://localhost:5033"
+    container_name: presales-frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:5033
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend

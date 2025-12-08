@@ -1,50 +1,41 @@
-# Build stage
-FROM node:20-alpine AS builder
-WORKDIR /app
+# Frontend Dockerfile for Next.js app
+# Multi-stage build using Node 20
 
-# Copy package files
-COPY package.json package-lock.json ./
+FROM node:20-alpine AS deps
+WORKDIR /app
 
 # Install dependencies
-RUN npm ci
+COPY package.json package-lock.json* ./
+RUN npm install
 
-# Copy source code
-COPY . .
-
-# Build arguments for environment variables
-ARG NEXT_PUBLIC_API_URL=http://148.113.37.231/presales-api
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-
-# Build the application
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine AS runner
+FROM node:20-alpine AS build
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# Reuse node_modules from deps stage
+COPY --from=deps /app/node_modules ./node_modules
 
-# Set environment variables
+# Copy source
+COPY . .
+
+# Build-time public API base URL (can be overridden via build args)
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+
+# Build Next.js app
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
 
-# Copy necessary files from builder
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-# Set ownership
-RUN chown -R nextjs:nodejs /app
-
-USER nextjs
+# Copy minimal runtime artifacts
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+COPY --from=build /app/next.config.* ./
+COPY --from=build /app/node_modules ./node_modules
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
-
-CMD ["node", "server.js"]
+# Use Next.js production server
+CMD ["npm", "start"]

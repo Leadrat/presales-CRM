@@ -84,14 +84,13 @@ export default function AnalyticsPage() {
   }, [from, to, selectedUserId, isAdmin, user?.id]);
 
   const displayAccounts = accountsSummary ?? { created: 0, modified: 0, booked: 0, lost: 0 };
-  const displayDemosBySize = demosBySize ?? { little: 0, small: 0, medium: 0, enterprise: 0 };
+  const displayDemosBySize = demosBySize ?? { small: 0, medium: 0, enterprise: 0 };
 
   const allZero =
     displayAccounts.created === 0 &&
     displayAccounts.modified === 0 &&
     displayAccounts.booked === 0 &&
     displayAccounts.lost === 0 &&
-    displayDemosBySize.little === 0 &&
     displayDemosBySize.small === 0 &&
     displayDemosBySize.medium === 0 &&
     displayDemosBySize.enterprise === 0;
@@ -273,12 +272,6 @@ export default function AnalyticsPage() {
             </div>
 
             <div className="mt-4 divide-y divide-gray-200 text-sm dark:divide-gray-800">
-              <div className="flex items-center justify-between py-2">
-                <span className="text-gray-600 dark:text-gray-300">Little (5–9 users)</span>
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {loading && !demosBySize ? "--" : displayDemosBySize.little}
-                </span>
-              </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-gray-600 dark:text-gray-300">Small (10–24 users)</span>
                 <span className="font-semibold text-gray-900 dark:text-white">

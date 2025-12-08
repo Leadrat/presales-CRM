@@ -1,29 +1,26 @@
-# Build stage
+# Backend Dockerfile for ASP.NET Core API
+# Multi-stage build: restore + publish, then run on aspnet runtime image
+
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-# Copy csproj and restore
+# Copy csproj and restore as distinct layers
 COPY Api.csproj ./
-RUN dotnet restore
+RUN dotnet restore Api.csproj
 
-# Copy everything else and build
+# Copy everything and publish
 COPY . .
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish Api.csproj -c Release -o /app/publish /p:UseAppHost=false
 
-# Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+# Runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 
-# Copy published files
+# Copy published output
 COPY --from=build /app/publish .
 
-# Environment variables
-ENV ASPNETCORE_ENVIRONMENT=Production
-ENV ASPNETCORE_URLS=http://+:5000
-
-EXPOSE 5000
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:5000/health || exit 1
+# Expose HTTP port and configure Kestrel
+ENV ASPNETCORE_URLS=http://+:5033
+EXPOSE 5033
 
 ENTRYPOINT ["dotnet", "Api.dll"]

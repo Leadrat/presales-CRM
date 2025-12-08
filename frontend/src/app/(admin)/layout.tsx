@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, BriefcaseBusiness, Users } from "lucide-react";
+import { LayoutDashboard, BriefcaseBusiness, Users, Building2 } from "lucide-react";
 import AppShellHeader from "@/components/layout/AppShellHeader";
 import { useAuth } from "@/context/AuthContext";
 import AdminGuard from "./guard";
@@ -59,7 +59,7 @@ export default function AdminLayout({
                 }`}
               >
                 <span className="flex items-center gap-3">
-                  <BriefcaseBusiness className="h-5 w-5" />
+                  <Building2 className="h-5 w-5" />
                   <span>Accounts</span>
                 </span>
               </button>

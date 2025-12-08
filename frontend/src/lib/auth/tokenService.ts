@@ -35,6 +35,12 @@ function getBroadcastChannel() {
     broadcastChannel = new BroadcastChannel("auth-channel");
     broadcastChannel.onmessage = (event: MessageEvent) => {
       if (event.data === "logout") {
+        try {
+          if (isBrowser()) {
+            sessionStorage.removeItem("dashboard_user_filter");
+          }
+        } catch {
+        }
         tokenService.clearTokens();
         if (!isOnLoginPage()) {
           window.location.href = getLoginPath();
@@ -128,6 +134,12 @@ export const tokenService = {
         clearTimeout(refreshTimeoutId);
       }
       refreshTimeoutId = null;
+    }
+    try {
+      if (isBrowser()) {
+        sessionStorage.removeItem("dashboard_user_filter");
+      }
+    } catch {
     }
   },
 

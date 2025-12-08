@@ -41,7 +41,7 @@ public class AccountDetailDto
     public string? DealStage { get; set; }
     public DateTimeOffset? ClosedDate { get; set; }
 
-    public DateTimeOffset CrmExpiry { get; set; }
+    public DateTimeOffset? CrmExpiry { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
     public int ContactCount { get; set; }

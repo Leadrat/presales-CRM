@@ -1,18 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Save, ArrowLeft, Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { createAccount, getAccountLookups, type AccountLookups } from "@/lib/api";
 import { CollapsibleContact, type ContactInput } from "@/components/contacts/CollapsibleContact";
 import { AddContactModal } from "@/components/contacts/AddContactModal";
+import PlaceholderSelect from "@/components/form/PlaceholderSelect";
+import PlaceholderInput from "@/components/form/PlaceholderInput";
+import PhoneNumberInput from "@/components/form/PhoneNumberInput";
+import CrmProviderSelect from "@/components/form/CrmProviderSelect";
+import CrmProviderMultiSelect from "@/components/form/CrmProviderMultiSelect";
 
 export default function NewAccountPage() {
   const router = useRouter();
   const { user, status } = useAuth();
 
   const [lookups, setLookups] = useState<AccountLookups | null>(null);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; fullName?: string; email?: string }[]>([]);
+  const [orderedCrmProviders, setOrderedCrmProviders] = useState<Array<{id: string; name: string}>>([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
@@ -24,9 +31,11 @@ export default function NewAccountPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [accountTypeId, setAccountTypeId] = useState("");
+  const [createdById, setCreatedById] = useState(user?.id || "");
   const [accountSizeId, setAccountSizeId] = useState("");
   const [crmProviderId, setCrmProviderId] = useState("");
-  const [crmProviderName, setCrmProviderName] = useState(""); // Text input for CRM name
+  const [crmProviderName, setCrmProviderName] = useState("");
+  const [selectedCrmProviders, setSelectedCrmProviders] = useState<Array<{id: string | null; name: string}>>([]);
   const [numberOfUsers, setNumberOfUsers] = useState<string>("");
   const [crmExpiry, setCrmExpiry] = useState("");
   const [leadSource, setLeadSource] = useState("");
@@ -39,14 +48,23 @@ export default function NewAccountPage() {
   const [contacts, setContacts] = useState<ContactInput[]>([]);
   const [addContactOpen, setAddContactOpen] = useState(false);
 
+  useEffect(() => {
+    const orderedCrmProviders = lookups
+      ? [
+          ...lookups.crmProviders.filter((p) => p.name !== "None" && p.name !== "None/Unknown"),
+          ...lookups.crmProviders.filter((p) => p.name === "None/Unknown"),
+        ]
+      : [];
+    setOrderedCrmProviders(orderedCrmProviders);
+  }, [lookups]);
+
   // Compute account size label from number of users
-  // Logic: 4-9 Little, 10-24 Small, 25-49 Medium, 50+ Enterprise
+  // Updated logic: <10 no label, 10-24 Small, 25-49 Medium, 50+ Enterprise
   const computeSizeLabel = (users: string | number | null | undefined): string => {
     const numUsers = typeof users === "string" ? parseInt(users, 10) : users;
-    if (typeof numUsers !== "number" || !Number.isFinite(numUsers) || numUsers < 4) {
+    if (typeof numUsers !== "number" || !Number.isFinite(numUsers) || numUsers < 10) {
       return "";
     }
-    if (numUsers <= 9) return "Little Account";
     if (numUsers <= 24) return "Small Account";
     if (numUsers <= 49) return "Medium Account";
     return "Enterprise";
@@ -55,7 +73,6 @@ export default function NewAccountPage() {
   // Get badge styling based on account size label (matches detail page style)
   const accountSizeTagClass = (label: string) => {
     const base = "inline-flex items-center justify-center rounded-lg px-5 py-1.5 text-base font-medium border";
-    if (label.includes("Little")) return `${base} border-cyan-400 bg-cyan-50 text-cyan-600 dark:border-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400`;
     if (label.includes("Small")) return `${base} border-green-400 bg-green-50 text-green-600 dark:border-green-600 dark:bg-green-900/30 dark:text-green-400`;
     if (label.includes("Medium")) return `${base} border-amber-400 bg-amber-50 text-amber-600 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-400`;
     if (label.includes("Enterprise")) return `${base} border-purple-400 bg-purple-50 text-purple-600 dark:border-purple-600 dark:bg-purple-900/30 dark:text-purple-400`;
@@ -70,38 +87,46 @@ export default function NewAccountPage() {
   }, [status, router]);
 
   // Load lookups for any authenticated user (Admin or Basic)
-  useEffect(() => {
-    let cancelled = false;
-
-    if (status !== "authenticated") {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const loadLookups = async () => {
+  const loadLookups = useCallback(async () => {
+    try {
       setLoadingLookups(true);
       setLookupError(null);
-      try {
-        const data = await getAccountLookups();
-        if (cancelled) return;
-        setLookups(data);
-      } catch (err: any) {
-        if (cancelled) return;
-        setLookupError(err?.message || "Failed to load account lookups");
-      } finally {
-        if (!cancelled) {
-          setLoadingLookups(false);
-        }
+      const data = await getAccountLookups();
+      setLookups(data);
+      return data;
+    } catch (error) {
+      console.error("Error fetching lookups:", error);
+      setLookupError("Failed to load account lookups. Please try again.");
+      return null;
+    } finally {
+      setLoadingLookups(false);
+    }
+  }, []);
+
+  // Refresh CRM providers after a new one is created
+  const refreshCrmProviders = useCallback(async () => {
+    const data = await loadLookups();
+    return data?.crmProviders || [];
+  }, [loadLookups]);
+
+  // Load team members
+  const loadTeamMembers = useCallback(async () => {
+    try {
+      const response = await fetch("/api/users");
+      if (response.ok) {
+        const users = await response.json();
+        setTeamMembers(users);
       }
-    };
+    } catch (error) {
+      console.error("Error fetching team members:", error);
+    }
+  }, []);
 
+  // Initial data loading
+  useEffect(() => {
     loadLookups();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [status, user]);
+    loadTeamMembers();
+  }, [loadLookups, loadTeamMembers]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,8 +188,11 @@ export default function NewAccountPage() {
         website: website.trim() || undefined,
         accountTypeId,
         accountSizeId: finalAccountSizeId,
-        currentCrmId: crmProviderId || undefined,
-        currentCrmName: crmProviderName.trim() || undefined,
+        // Send the primary CRM (first in the list) as the main CRM
+        currentCrmId: selectedCrmProviders.length > 0 && selectedCrmProviders[0].id ? selectedCrmProviders[0].id : undefined,
+        currentCrmName: selectedCrmProviders.length > 0 && !selectedCrmProviders[0].id ? selectedCrmProviders[0].name : undefined,
+        // In the future, we'll update the API to accept multiple CRMs
+        // crmProviders: selectedCrmProviders,
         numberOfUsers: numberOfUsers ? Number(numberOfUsers) : undefined,
         crmExpiry: crmExpiry.trim() || undefined,
         leadSource: leadSource.trim() || undefined,
@@ -217,35 +245,17 @@ export default function NewAccountPage() {
   if (status === "unauthenticated") {
     return null;
   }
-
+  
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 text-gray-900 dark:bg-slate-950 dark:text-gray-100 lg:px-10 lg:py-8">
-      <div className="mx-auto w-full max-w-6xl space-y-6">
-        {/* Page header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="mt-1 inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200"
-              aria-label="Go back"
-              title="Back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <div className="flex flex-col gap-1">
-              <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-50">New Account</h1>
-              <p className="mt-1 text-base text-gray-600 dark:text-gray-400">Create a new account</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {(() => {
-              const sizeLabel = computeSizeLabel(numberOfUsers);
-              return sizeLabel ? (
-                <span className={accountSizeTagClass(sizeLabel)}>{sizeLabel}</span>
-              ) : null;
-            })()}
-          </div>
+    <div className="min-h-screen bg-slate-50 px-4 py-6 text-gray-900 dark:bg-slate-950 dark:text-gray-100 lg:px-8 lg:py-8">
+      <div className="mx-auto w-full max-w-4xl">
+        <div className="flex items-center gap-3">
+          {(() => {
+            const sizeLabel = computeSizeLabel(numberOfUsers);
+            return sizeLabel ? (
+              <span className={accountSizeTagClass(sizeLabel)}>{sizeLabel}</span>
+            ) : null;
+          })()}
         </div>
 
         {/* Card */}
@@ -290,21 +300,14 @@ export default function NewAccountPage() {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Account type<span className="text-red-500">*</span>
                       </label>
-                      <select
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      <PlaceholderSelect
+                        options={lookups.accountTypes}
                         value={accountTypeId}
-                        onChange={(e) => setAccountTypeId(e.target.value)}
-                        required
-                      >
-                        <option value="" disabled>
-                          Select type
-                        </option>
-                        {lookups.accountTypes.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(value) => setAccountTypeId(value)}
+                        placeholder="Select type"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                        required={true}
+                      />
                     </div>
 
                     {/* Number of users */}
@@ -337,12 +340,10 @@ export default function NewAccountPage() {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Phone number<span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="tel"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-900"
-                        placeholder="e.g. +91XXXXXXXXXX"
+                      <PhoneNumberInput
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        onChange={(value) => setPhone(value)}
+                        placeholder="Phone number"
                         required
                       />
                     </div>
@@ -410,35 +411,32 @@ export default function NewAccountPage() {
                     {/* Account created by */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account created by</label>
-                      <select
+                      <PlaceholderSelect
+                        options={teamMembers.map(tm => ({ id: tm.id, name: tm.fullName || tm.email || '' }))}
+                        value={createdById}
+                        onChange={(value) => setCreatedById(value)}
+                        placeholder="Select user"
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
-                        value={user?.id || ""}
-                        disabled
-                      >
-                        <option value={user?.id || ""}>
-                          {user?.fullName && user.fullName.trim().length > 0
-                            ? user.fullName
-                            : user?.email || "-"}
-                        </option>
-                      </select>
+                      />
                     </div>
                     {/* Lead Source */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lead source</label>
-                      <select
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      <PlaceholderSelect
+                        options={[
+                          { id: "LINKEDIN", name: "LinkedIn" },
+                          { id: "INSTAGRAM", name: "Instagram" },
+                          { id: "WEBSITE", name: "Website" },
+                          { id: "COLD_CALL", name: "Cold call" },
+                          { id: "FACEBOOK", name: "Facebook" },
+                          { id: "GOOGLE_ADS", name: "Google Ads" },
+                          { id: "REFERRAL", name: "Referral" }
+                        ]}
                         value={leadSource}
-                        onChange={(e) => setLeadSource(e.target.value)}
-                      >
-                        <option value="">Select source</option>
-                        <option value="LINKEDIN">LinkedIn</option>
-                        <option value="INSTAGRAM">Instagram</option>
-                        <option value="WEBSITE">Website</option>
-                        <option value="COLD_CALL">Cold call</option>
-                        <option value="FACEBOOK">Facebook</option>
-                        <option value="GOOGLE_ADS">Google Ads</option>
-                        <option value="REFERRAL">Referral</option>
-                      </select>
+                        onChange={(value) => setLeadSource(value)}
+                        placeholder="Select source"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      />
                     </div>
 
                     {/* City */}
@@ -456,29 +454,44 @@ export default function NewAccountPage() {
                     {/* Deal stage */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deal stage</label>
-                      <select
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      <PlaceholderSelect
+                        options={[
+                          { id: "NEW_LEAD", name: "New Lead" },
+                          { id: "CONTACTED", name: "Contacted" },
+                          { id: "QUALIFIED", name: "Qualified" },
+                          { id: "IN_PROGRESS", name: "In progress" },
+                          { id: "WON", name: "Won" },
+                          { id: "LOST", name: "Lost" }
+                        ]}
                         value={dealStage}
-                        onChange={(e) => setDealStage(e.target.value)}
-                      >
-                        <option value="NEW_LEAD">New Lead</option>
-                        <option value="CONTACTED">Contacted</option>
-                        <option value="QUALIFIED">Qualified</option>
-                        <option value="IN_PROGRESS">In progress</option>
-                        <option value="WON">Won</option>
-                        <option value="LOST">Lost</option>
-                      </select>
+                        onChange={(value) => setDealStage(value)}
+                        placeholder="Select stage"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      />
                     </div>
 
-                    {/* Current CRM - TEXT INPUT */}
+                    {/* Current CRM */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Current CRM</label>
-                      <input
-                        type="text"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-900"
-                        placeholder="Enter CRM name"
-                        value={crmProviderName}
-                        onChange={(e) => setCrmProviderName(e.target.value)}
+                      <CrmProviderMultiSelect
+                        options={orderedCrmProviders}
+                        values={selectedCrmProviders}
+                        onChange={({ providers }) => {
+                          setSelectedCrmProviders(providers);
+                          
+                          // For backward compatibility, also set the first CRM as the primary one
+                          if (providers.length > 0) {
+                            const primary = providers[0];
+                            setCrmProviderId(primary.id ?? "");
+                            setCrmProviderName(primary.id ? "" : primary.name);
+                          } else {
+                            setCrmProviderId("");
+                            setCrmProviderName("");
+                          }
+                        }}
+                        onRefreshOptions={refreshCrmProviders}
+                        placeholder="Select or type CRM providers"
+                        className="w-full"
                       />
                     </div>
 
@@ -495,14 +508,11 @@ export default function NewAccountPage() {
                         onChange={(e) => setCrmExpiry(e.target.value)}
                       />
                     </div>
-
-                    
                   </div>
                 </div>
 
                 {/* Initial contacts for this account (header removed per request) */}
                 <div className="mt-6 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-800">
-
                   {contacts.length > 0 && (
                     <div className="space-y-3">
                       {contacts.map((c, index) => (

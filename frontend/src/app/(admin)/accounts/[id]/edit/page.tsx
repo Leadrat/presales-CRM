@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   getAccountDetail,
@@ -14,6 +14,8 @@ import {
 } from "@/lib/api";
 import { CollapsibleContact, type ContactInput } from "@/components/contacts/CollapsibleContact";
 import { AddContactModal } from "@/components/contacts/AddContactModal";
+import CrmProviderSelect from "@/components/form/CrmProviderSelect";
+import CrmProviderMultiSelect from "@/components/form/CrmProviderMultiSelect";
 
 export default function AdminEditAccountPage() {
   const router = useRouter();
@@ -34,6 +36,8 @@ export default function AdminEditAccountPage() {
   const [accountTypeId, setAccountTypeId] = useState("");
   const [accountSizeId, setAccountSizeId] = useState("");
   const [crmProviderId, setCrmProviderId] = useState("");
+  const [crmProviderName, setCrmProviderName] = useState("");
+  const [selectedCrmProviders, setSelectedCrmProviders] = useState<Array<{id: string | null; name: string}>>([]);
   const [numberOfUsers, setNumberOfUsers] = useState<string>("");
   const [crmExpiry, setCrmExpiry] = useState("");
 
@@ -45,6 +49,27 @@ export default function AdminEditAccountPage() {
 
   const [contacts, setContacts] = useState<ContactInput[]>([]);
   const [addContactOpen, setAddContactOpen] = useState(false);
+
+  // Load lookups
+  const loadLookups = useCallback(async () => {
+    try {
+      const data = await getAccountLookups();
+      setLookups(data);
+      return data;
+    } catch (error: any) {
+      console.error("Error loading lookups:", error);
+      setLookupError(error?.message || "Failed to load account lookups");
+      return null;
+    } finally {
+      setLoadingLookups(false);
+    }
+  }, []);
+
+  // Refresh CRM providers after a new one is created
+  const refreshCrmProviders = useCallback(async () => {
+    const data = await loadLookups();
+    return data?.crmProviders || [];
+  }, [loadLookups]);
 
   useEffect(() => {
     if (!accountId) {
@@ -62,7 +87,7 @@ export default function AdminEditAccountPage() {
 
         const [detailResult, lookupData] = await Promise.all([
           getAccountDetail(accountId),
-          getAccountLookups(),
+          loadLookups(),
         ]);
 
         if (cancelled) return;
@@ -85,6 +110,19 @@ export default function AdminEditAccountPage() {
         setAccountTypeId(account.accountTypeId);
         setAccountSizeId(account.accountSizeId);
         setCrmProviderId(account.currentCrmId);
+        // Don't display "None" or "None/Unknown" as CRM provider name
+        const crmName = account.crmProviderName ?? "";
+        const formattedCrmName = crmName === "None" || crmName === "None/Unknown" ? "" : crmName;
+        setCrmProviderName(formattedCrmName);
+        
+        // Initialize the multi-select CRM providers
+        if (account.currentCrmId) {
+          setSelectedCrmProviders([{ id: account.currentCrmId, name: formattedCrmName }]);
+        } else if (formattedCrmName) {
+          setSelectedCrmProviders([{ id: null, name: formattedCrmName }]);
+        } else {
+          setSelectedCrmProviders([]);
+        }
         setNumberOfUsers(account.numberOfUsers ? String(account.numberOfUsers) : "");
 
         if (account.crmExpiry) {
@@ -145,12 +183,17 @@ export default function AdminEditAccountPage() {
 
     const payload: AccountUpdateInput = {
       companyName: companyName.trim(),
-      website: website.trim() || undefined,
+      websiteUrl: website.trim() || undefined,
       accountTypeId,
       accountSizeId,
-      currentCrmId: crmProviderId || undefined,
+      // Send the primary CRM (first in the list) as the main CRM
+      currentCrmId: selectedCrmProviders.length > 0 && selectedCrmProviders[0].id ? selectedCrmProviders[0].id : undefined,
+      currentCrmName: selectedCrmProviders.length > 0 && !selectedCrmProviders[0].id ? selectedCrmProviders[0].name : undefined,
+      // In the future, we'll update the API to accept multiple CRMs
+      // crmProviders: selectedCrmProviders,
       numberOfUsers: numberOfUsers ? Number(numberOfUsers) : undefined,
-      crmExpiry: crmExpiry.trim() || undefined,
+      // If CRM expiry field is cleared, send empty string so backend clears CrmExpiry
+      crmExpiry: crmExpiry.trim() === "" ? "" : crmExpiry.trim(),
       decisionMakers: decisionMakers.trim(),
       instagramUrl: instagramUrl.trim() || undefined,
       linkedinUrl: linkedinUrl.trim() || undefined,
@@ -332,20 +375,26 @@ export default function AdminEditAccountPage() {
                   <label className="block text-sm font-medium text-gray-300">
                     Current CRM provider
                   </label>
-                  <select
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-gray-100 outline-none ring-0 focus:border-brand-400 focus:ring-1 focus:ring-brand-400"
-                    value={crmProviderId}
-                    onChange={(e) => setCrmProviderId(e.target.value)}
-                  >
-                    <option value="">
-                      Select CRM provider
-                    </option>
-                    {lookups.crmProviders.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                  <CrmProviderMultiSelect
+                    options={lookups.crmProviders}
+                    values={selectedCrmProviders}
+                    onChange={({ providers }) => {
+                      setSelectedCrmProviders(providers);
+                      
+                      // For backward compatibility, also set the first CRM as the primary one
+                      if (providers.length > 0) {
+                        const primary = providers[0];
+                        setCrmProviderId(primary.id ?? "");
+                        setCrmProviderName(primary.id ? "" : primary.name);
+                      } else {
+                        setCrmProviderId("");
+                        setCrmProviderName("");
+                      }
+                    }}
+                    onRefreshOptions={refreshCrmProviders}
+                    placeholder="Select or type CRM providers"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900/60 text-gray-100 focus:border-brand-400 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -466,10 +515,23 @@ export default function AdminEditAccountPage() {
             </form>
 
             <AddContactModal
-              isOpen={addContactOpen}
+              open={addContactOpen}
               onClose={() => setAddContactOpen(false)}
               onCreated={(contact) => {
-                setContacts((prev) => [...prev, contact]);
+                setContacts((prev) => [
+                  ...prev,
+                  {
+                    name: contact.name ?? "",
+                    email: contact.email ?? "",
+                    workPhone: contact.workPhone ?? "",
+                    personalPhone: contact.personalPhone ?? "",
+                    designation: contact.designation ?? "",
+                    city: contact.city ?? "",
+                    dateOfBirth: contact.dateOfBirth ?? "",
+                    instagramUrl: contact.instagramUrl ?? "",
+                    linkedinUrl: contact.linkedinUrl ?? "",
+                  },
+                ]);
               }}
             />
             </>
