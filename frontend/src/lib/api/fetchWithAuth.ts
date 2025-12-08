@@ -4,6 +4,17 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+// Detect basePath from current URL pathname
+function getBasePath(): string {
+  if (!isBrowser()) return "";
+  // Check if current path starts with a known basePath
+  const pathname = window.location.pathname;
+  if (pathname.startsWith("/presales")) {
+    return "/presales";
+  }
+  return "";
+}
+
 export async function fetchWithAuth(input: string, init: RequestInit = {}) {
   const originalInit: RequestInit = { ...init };
 
@@ -34,9 +45,11 @@ export async function fetchWithAuth(input: string, init: RequestInit = {}) {
     await tokenService.refreshTokens();
   } catch {
     tokenService.clearTokens();
-    if (isBrowser() && window.location.pathname !== "/login") {
+    const basePath = getBasePath();
+    const loginPath = `${basePath}/login`;
+    if (isBrowser() && !window.location.pathname.endsWith("/login")) {
       // Redirect to login; toast can be handled at page level
-      window.location.href = "/login";
+      window.location.href = loginPath;
     }
     // Re-throw to let callers handle error if needed
     throw new Error("Unauthorized");

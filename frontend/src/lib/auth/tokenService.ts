@@ -9,6 +9,25 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+// Detect basePath from current URL pathname
+function getBasePath(): string {
+  if (!isBrowser()) return "";
+  const pathname = window.location.pathname;
+  if (pathname.startsWith("/presales")) {
+    return "/presales";
+  }
+  return "";
+}
+
+function getLoginPath() {
+  return `${getBasePath()}/login`;
+}
+
+function isOnLoginPage() {
+  if (!isBrowser()) return false;
+  return window.location.pathname.endsWith("/login");
+}
+
 function getBroadcastChannel() {
   if (!isBrowser()) return null;
   if (typeof BroadcastChannel === "undefined") return null;
@@ -23,8 +42,8 @@ function getBroadcastChannel() {
         } catch {
         }
         tokenService.clearTokens();
-        if (window.location.pathname !== "/login") {
-          window.location.href = "/login";
+        if (!isOnLoginPage()) {
+          window.location.href = getLoginPath();
         }
       }
     };
@@ -55,8 +74,8 @@ function scheduleProactiveRefresh() {
     refreshTimeoutId = window.setTimeout(() => {
       tokenService.refreshTokens().catch(() => {
         tokenService.clearTokens();
-        if (isBrowser() && window.location.pathname !== "/login") {
-          window.location.href = "/login";
+        if (isBrowser() && !isOnLoginPage()) {
+          window.location.href = getLoginPath();
         }
       });
     }, delay);
@@ -81,7 +100,7 @@ export const tokenService = {
       throw new Error("No refresh token available");
     }
 
-    const res = await fetch("/api/auth/refresh", {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
@@ -149,8 +168,8 @@ export const tokenService = {
         bc.postMessage("logout");
       }
       this.clearTokens();
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+      if (!isOnLoginPage()) {
+        window.location.href = getLoginPath();
       }
     }
   },

@@ -1,10 +1,12 @@
 "use client";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 import { signup } from "@/lib/api";
 
 export default function SignUpForm() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -38,8 +40,8 @@ export default function SignUpForm() {
         password,
         phone: phone || undefined,
       });
-      // On success, redirect to login
-      window.location.href = "/login";
+      // On success, redirect to login (uses Next.js router which respects basePath)
+      router.push("/login");
     } catch (err: any) {
       setError(err?.message || "Signup failed");
     } finally {
