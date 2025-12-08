@@ -153,6 +153,7 @@ export type TeamUser = {
   phone?: string | null;
   isActive: boolean;
   roleName?: string | null;
+  deactivatedAt?: string | null;
 };
 
 export type TeamUsersPage = {
@@ -187,14 +188,24 @@ export async function getTeamUsers(params?: {
   const data = (payload?.data ?? payload ?? {}) as any;
   const rawItems = (data.items ?? []) as any[];
 
-  const items: TeamUser[] = rawItems.map((u) => ({
-    id: String(u.id),
-    fullName: u.fullName ?? null,
-    email: String(u.email ?? ""),
-    phone: u.phone ?? null,
-    isActive: Boolean(u.isActive),
-    roleName: u.roleName ?? null,
-  }));
+  const items: TeamUser[] = rawItems.map((u) => {
+    const isActive = Boolean(u.isActive);
+    const deactivatedAt: string | null =
+      // Prefer an explicit deactivatedAt from the API if present
+      (u.deactivatedAt as string | null | undefined) ??
+      // Otherwise, if the user is inactive, fall back to updatedAt as a best-effort approximation
+      (!isActive ? ((u.updatedAt as string | null | undefined) ?? null) : null);
+
+    return {
+      id: String(u.id),
+      fullName: u.fullName ?? null,
+      email: String(u.email ?? ""),
+      phone: u.phone ?? null,
+      isActive,
+      roleName: u.roleName ?? null,
+      deactivatedAt,
+    };
+  });
 
   return {
     items,
@@ -324,8 +335,14 @@ export type DashboardSummary = {
   demosCompleted: number;
 };
 
-export async function getDashboardSummary(): Promise<DashboardSummary> {
-  const res = await fetchWithAuth(`${API_BASE}/api/Accounts/dashboard-summary`, {
+export async function getDashboardSummary(params?: { userIds?: string[] | null }): Promise<DashboardSummary> {
+  const search = new URLSearchParams();
+  if (params?.userIds && params.userIds.length > 0) {
+    search.set("userIds", params.userIds.join(","));
+  }
+
+  const url = `${API_BASE}/api/Accounts/dashboard-summary${search.toString() ? `?${search.toString()}` : ""}`;
+  const res = await fetchWithAuth(url, {
     method: "GET",
     cache: "no-store",
   });
@@ -361,11 +378,16 @@ export async function getAnalyticsAccounts(params: {
   from?: string;
   to?: string;
   userId?: string | null;
-}): Promise<AnalyticsAccountsSummary> {
+  userIds?: string[] | null;
+} = {}): Promise<AnalyticsAccountsSummary> {
   const search = new URLSearchParams();
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
-  if (params.userId) search.set("userId", params.userId);
+  if (params.userIds && params.userIds.length > 0) {
+    search.set("userIds", params.userIds.join(","));
+  } else if (params.userId) {
+    search.set("userId", params.userId);
+  }
 
   const url = `${API_BASE}/api/analytics/accounts${search.toString() ? `?${search.toString()}` : ""}`;
   const res = await fetchWithAuth(url, {
@@ -391,11 +413,16 @@ export async function getDemosBySize(params: {
   from?: string;
   to?: string;
   userId?: string | null;
-}): Promise<DemosBySizeSummary> {
+  userIds?: string[] | null;
+} = {}): Promise<DemosBySizeSummary> {
   const search = new URLSearchParams();
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
-  if (params.userId) search.set("userId", params.userId);
+  if (params.userIds && params.userIds.length > 0) {
+    search.set("userIds", params.userIds.join(","));
+  } else if (params.userId) {
+    search.set("userId", params.userId);
+  }
 
   const url = `${API_BASE}/api/analytics/demos-by-size${search.toString() ? `?${search.toString()}` : ""}`;
   const res = await fetchWithAuth(url, {
@@ -908,6 +935,7 @@ export async function createAccount(input: AccountCreateInput) {
       accountTypeId: input.accountTypeId,
       accountSizeId: input.accountSizeId,
       currentCrmId: input.currentCrmId ?? null,
+      currentCrmName: input.currentCrmName ?? null,
       numberOfUsers: input.numberOfUsers ?? null,
       crmExpiry: input.crmExpiry ?? null,
       leadSource: input.leadSource ?? null,
@@ -944,7 +972,10 @@ export async function createAccount(input: AccountCreateInput) {
 export async function updateAccount(id: string, input: AccountUpdateInput) {
   // Convert crmExpiry from ISO to MM/YY format if it's an ISO date
   let crmExpiryFormatted: string | null = null;
-  if (input.crmExpiry) {
+  if (input.crmExpiry === "") {
+    // Explicit empty string means: clear CrmExpiry on the backend
+    crmExpiryFormatted = "";
+  } else if (input.crmExpiry) {
     // Check if it's already in MM/YY format
     if (/^\d{2}\/\d{2}$/.test(input.crmExpiry)) {
       crmExpiryFormatted = input.crmExpiry;

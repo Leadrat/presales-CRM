@@ -116,7 +116,7 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.Id);
 
             e.Property(x => x.CompanyName).IsRequired();
-            e.Property(x => x.CrmExpiry).IsRequired();
+            e.Property(x => x.CrmExpiry);
             e.Property(x => x.CreatedAt).IsRequired();
             e.Property(x => x.UpdatedAt).IsRequired();
             e.Property(x => x.IsDeleted).IsRequired();

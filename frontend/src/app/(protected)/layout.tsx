@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, Users, BriefcaseBusiness } from "lucide-react";
+import { LayoutDashboard, Users, BriefcaseBusiness, Building2 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import AppShellHeader from "@/components/layout/AppShellHeader";
 import { useAuth } from "@/context/AuthContext";
@@ -57,7 +57,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 }`}
               >
                 <span className="flex items-center gap-3">
-                  <Users className="h-5 w-5" />
+                  <Building2 className="h-5 w-5" />
                   <span>Accounts</span>
                 </span>
               </button>
@@ -75,7 +75,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 }`}
               >
                 <span className="flex items-center gap-3">
-                  <BriefcaseBusiness className="h-5 w-5" />
+                  <Building2 className="h-5 w-5" />
                   <span>Accounts</span>
                 </span>
               </button>

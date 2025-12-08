@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { Building2 } from "lucide-react";
 import {
   BoxCubeIcon,
   CalenderIcon,
@@ -34,6 +35,11 @@ const navItems: NavItem[] = [
     name: "Dashboard",
     adminOnly: true,
     subItems: [{ name: "Ecommerce", path: "/", pro: false, adminOnly: true }],
+  },
+  {
+    icon: <Building2 className="w-5 h-5" />,
+    name: "Accounts",
+    path: "/accounts",
   },
   {
     icon: <CalenderIcon />,

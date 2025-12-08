@@ -23,7 +23,7 @@ public class AccountsController : ControllerBase
 
     private static readonly string[] AllowedLeadSources = new[]
     {
-        "LINKEDIN", "INSTAGRAM", "WEBSITE", "COLD_CALL", "FACEBOOK", "GOOGLE_ADS", "REFERRAL", "NOT_SET"
+        "LINKEDIN", "INSTAGRAM", "WEBSITE", "COLD_CALL", "FACEBOOK", "GOOGLE_ADS", "REFERRAL"
     };
 
     private static readonly string[] AllowedDealStages = new[]
@@ -249,17 +249,25 @@ public class AccountsController : ControllerBase
         }
 
         // Parse CrmExpiry from MM/YY into a DateTimeOffset (assume end of month, UTC) - optional
+        bool clearCrmExpiry = false;
         DateTimeOffset? crmExpiryDate = null;
-        if (!string.IsNullOrWhiteSpace(request.CrmExpiry))
+        if (request.CrmExpiry != null)
         {
-            if (!DateTime.TryParseExact(request.CrmExpiry, "MM/yy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+            if (string.IsNullOrWhiteSpace(request.CrmExpiry))
             {
-                return BadRequest(new { error = new { code = "INVALID_CRM_EXPIRY", message = "CrmExpiry must be in MM/YY format" } });
+                clearCrmExpiry = true;
             }
-            crmExpiryDate = new DateTimeOffset(parsedDate, TimeSpan.Zero);
+            else
+            {
+                if (!DateTime.TryParseExact(request.CrmExpiry, "MM/yy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+                {
+                    return BadRequest(new { error = new { code = "INVALID_CRM_EXPIRY", message = "CrmExpiry must be in MM/YY format" } });
+                }
+                crmExpiryDate = new DateTimeOffset(parsedDate, TimeSpan.Zero);
+            }
         }
 
-        var leadSource = string.IsNullOrWhiteSpace(request.LeadSource) ? "NOT_SET" : request.LeadSource.Trim().ToUpperInvariant();
+        var leadSource = string.IsNullOrWhiteSpace(request.LeadSource) ? null : request.LeadSource.Trim().ToUpperInvariant();
         if (!AllowedLeadSources.Contains(leadSource))
         {
             return BadRequest(new { error = new { code = "INVALID_LEAD_SOURCE", message = "LeadSource is not valid." } });
@@ -276,7 +284,6 @@ public class AccountsController : ControllerBase
         var crmProviderId = await ResolveCrmProviderAsync(request.CurrentCrmId, request.CurrentCrmName);
 
         // Use default expiry (1 year from now) if not provided
-        var expiryDate = crmExpiryDate ?? new DateTimeOffset(now.Year + 1, now.Month, DateTime.DaysInMonth(now.Year + 1, now.Month), 23, 59, 59, TimeSpan.Zero);
 
         var account = new Account
         {
@@ -285,7 +292,7 @@ public class AccountsController : ControllerBase
             AccountTypeId = request.AccountTypeId,
             AccountSizeId = request.AccountSizeId,
             CurrentCrmId = crmProviderId,
-            CrmExpiry = expiryDate,
+            CrmExpiry = crmExpiryDate,
             LeadSource = leadSource,
             DealStage = dealStage,
             CreatedByUserId = _current.UserId.Value,
@@ -408,6 +415,7 @@ public class AccountsController : ControllerBase
 
         var accountTypes = await _db.AccountTypes
             .AsNoTracking()
+            .Where(t => t.Name != "Unassigned")
             .OrderBy(t => t.DisplayOrder)
             .Select(t => new { id = t.Id, name = t.Name })
             .ToListAsync();
@@ -986,14 +994,22 @@ public class AccountsController : ControllerBase
         }
 
         // Parse CrmExpiry from MM/YY into a DateTimeOffset (assume end of month, UTC) - optional
+        bool clearCrmExpiry = false;
         DateTimeOffset? crmExpiryDate = null;
-        if (!string.IsNullOrWhiteSpace(request.CrmExpiry))
+        if (request.CrmExpiry != null)
         {
-            if (!DateTime.TryParseExact(request.CrmExpiry, "MM/yy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+            if (string.IsNullOrWhiteSpace(request.CrmExpiry))
             {
-                return BadRequest(new { error = new { code = "INVALID_CRM_EXPIRY", message = "CrmExpiry must be in MM/YY format" } });
+                clearCrmExpiry = true;
             }
-            crmExpiryDate = new DateTimeOffset(parsedDate, TimeSpan.Zero);
+            else
+            {
+                if (!DateTime.TryParseExact(request.CrmExpiry, "MM/yy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+                {
+                    return BadRequest(new { error = new { code = "INVALID_CRM_EXPIRY", message = "CrmExpiry must be in MM/YY format" } });
+                }
+                crmExpiryDate = new DateTimeOffset(parsedDate, TimeSpan.Zero);
+            }
         }
 
         var leadSource = request.LeadSource is null
@@ -1044,7 +1060,11 @@ public class AccountsController : ControllerBase
         {
             account.CurrentCrmId = await ResolveCrmProviderAsync(null, request.CurrentCrmName);
         }
-        if (crmExpiryDate.HasValue)
+        if (clearCrmExpiry)
+        {
+            account.CrmExpiry = null;
+        }
+        else if (crmExpiryDate.HasValue)
         {
             account.CrmExpiry = crmExpiryDate.Value;
         }
@@ -1640,32 +1660,64 @@ public class AccountsController : ControllerBase
         return Ok(new { data = entries });
     }
 
-    // Dashboard summary for all users (Admin and Basic see global totals)
+    // Dashboard summary with optional per-user filtering
     [HttpGet("dashboard-summary")]
-    public async Task<ActionResult<object>> GetDashboardSummary()
+    public async Task<ActionResult<object>> GetDashboardSummary([FromQuery] string? userIds)
     {
         if (!_current.IsAuthenticated || _current.UserId is null)
         {
             return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "Not authenticated" } });
         }
 
-        // Global counts across all non-deleted accounts and demos.
-        // Demos that belong to soft-deleted accounts are also ignored.
-        var totalAccounts = await _db.Accounts
+        var role = _current.Role ?? "Basic";
+        List<Guid>? filterUserIds = null;
+
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(userIds))
+            {
+                filterUserIds = userIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => Guid.TryParse(x, out var g) ? (Guid?)g : null)
+                    .Where(g => g.HasValue)
+                    .Select(g => g!.Value)
+                    .Distinct()
+                    .ToList();
+            }
+        }
+        else if (_current.UserId is Guid currentUserId)
+        {
+            filterUserIds = new List<Guid> { currentUserId };
+        }
+
+        var accountsQuery = _db.Accounts
             .AsNoTracking()
-            .Where(a => !a.IsDeleted)
+            .Where(a => !a.IsDeleted);
+
+        if (filterUserIds is { Count: > 0 })
+        {
+            accountsQuery = accountsQuery.Where(a => a.CreatedByUserId.HasValue && filterUserIds.Contains(a.CreatedByUserId.Value));
+        }
+
+        var totalAccounts = await accountsQuery.CountAsync();
+
+        var demosQuery = _db.Demos
+            .AsNoTracking()
+            .Where(d => !d.IsDeleted && d.Account != null && !d.Account.IsDeleted);
+
+        if (filterUserIds is { Count: > 0 })
+        {
+            demosQuery = demosQuery.Where(d =>
+                filterUserIds.Contains(d.DemoAlignedByUserId) ||
+                (d.DemoDoneByUserId.HasValue && filterUserIds.Contains(d.DemoDoneByUserId.Value)));
+        }
+
+        var demosScheduled = await demosQuery
+            .Where(d => d.Status == DemoStatus.Scheduled)
             .CountAsync();
 
-        // Count demos by status, excluding demos that are deleted themselves
-        // AND demos whose parent account has been soft-deleted.
-        var demosScheduled = await _db.Demos
-            .AsNoTracking()
-            .Where(d => !d.IsDeleted && d.Status == DemoStatus.Scheduled && d.Account != null && !d.Account.IsDeleted)
-            .CountAsync();
-
-        var demosCompleted = await _db.Demos
-            .AsNoTracking()
-            .Where(d => !d.IsDeleted && d.Status == DemoStatus.Completed && d.Account != null && !d.Account.IsDeleted)
+        var demosCompleted = await demosQuery
+            .Where(d => d.Status == DemoStatus.Completed)
             .CountAsync();
 
         return Ok(new

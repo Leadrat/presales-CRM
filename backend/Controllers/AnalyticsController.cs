@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -79,7 +80,7 @@ public class AnalyticsController : ControllerBase
 
     private static string GetSizeBucket(int numberOfUsers)
     {
-        if (numberOfUsers < 5) return "none"; // below Little – not counted in any named bucket
+        if (numberOfUsers <= 0) return "none";
         if (numberOfUsers <= 9) return "little";
         if (numberOfUsers <= 24) return "small";
         if (numberOfUsers <= 49) return "medium";
@@ -87,7 +88,7 @@ public class AnalyticsController : ControllerBase
     }
 
     [HttpGet("accounts")]
-    public async Task<ActionResult<object>> GetAccountAnalytics([FromQuery] string? from, [FromQuery] string? to, [FromQuery] Guid? userId)
+    public async Task<ActionResult<object>> GetAccountAnalytics([FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? userIds, [FromQuery] Guid? userId)
     {
         if (!_current.IsAuthenticated || _current.UserId is null)
         {
@@ -101,21 +102,38 @@ public class AnalyticsController : ControllerBase
             return BadRequest(new { error = new { code = "INVALID_DATE_RANGE", message = "Date range cannot exceed 12 months." } });
         }
 
-        // User scoping:
-        // - Admins can optionally filter by userId (per-user metrics)
-        // - Non-admins see global metrics (no per-user filtering)
         var role = _current.Role ?? "Basic";
-        var effectiveUserId = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-            ? userId
-            : (Guid?)null;
+        List<Guid>? filterUserIds = null;
+
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(userIds))
+            {
+                filterUserIds = userIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => Guid.TryParse(x, out var g) ? (Guid?)g : null)
+                    .Where(g => g.HasValue)
+                    .Select(g => g!.Value)
+                    .Distinct()
+                    .ToList();
+            }
+            else if (userId.HasValue)
+            {
+                filterUserIds = new List<Guid> { userId.Value };
+            }
+        }
+        else if (_current.UserId is Guid currentUserId)
+        {
+            filterUserIds = new List<Guid> { currentUserId };
+        }
 
         var accounts = _db.Accounts
             .AsNoTracking()
             .Where(a => !a.IsDeleted);
 
-        if (effectiveUserId.HasValue)
+        if (filterUserIds is { Count: > 0 })
         {
-            accounts = accounts.Where(a => a.CreatedByUserId == effectiveUserId.Value);
+            accounts = accounts.Where(a => a.CreatedByUserId.HasValue && filterUserIds.Contains(a.CreatedByUserId.Value));
         }
 
         // If no date range is provided, return lifetime totals explicitly (mirrors dashboard-summary semantics)
@@ -209,7 +227,7 @@ public class AnalyticsController : ControllerBase
     }
 
     [HttpGet("demos-by-size")]
-    public async Task<ActionResult<object>> GetDemosBySize([FromQuery] string? from, [FromQuery] string? to, [FromQuery] Guid? userId)
+    public async Task<ActionResult<object>> GetDemosBySize([FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? userIds, [FromQuery] Guid? userId)
     {
         if (!_current.IsAuthenticated || _current.UserId is null)
         {
@@ -219,20 +237,39 @@ public class AnalyticsController : ControllerBase
         var (fromDate, toDate) = ParseDateRange(from, to);
 
         var role = _current.Role ?? "Basic";
-        // Admins can filter by userId; non-admins see global demos (no per-user filter)
-        var effectiveUserId = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-            ? userId
-            : (Guid?)null;
+        List<Guid>? filterUserIds = null;
+
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(userIds))
+            {
+                filterUserIds = userIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => Guid.TryParse(x, out var g) ? (Guid?)g : null)
+                    .Where(g => g.HasValue)
+                    .Select(g => g!.Value)
+                    .Distinct()
+                    .ToList();
+            }
+            else if (userId.HasValue)
+            {
+                filterUserIds = new List<Guid> { userId.Value };
+            }
+        }
+        else if (_current.UserId is Guid currentUserId)
+        {
+            filterUserIds = new List<Guid> { currentUserId };
+        }
 
         var demos = _db.Demos
             .AsNoTracking()
             .Where(d => !d.IsDeleted && d.Account != null && !d.Account.IsDeleted);
 
-        // Filter by user if provided – consider either aligned-by or done-by
-        if (effectiveUserId.HasValue)
+        if (filterUserIds is { Count: > 0 })
         {
-            var uid = effectiveUserId.Value;
-            demos = demos.Where(d => d.DemoAlignedByUserId == uid || d.DemoDoneByUserId == uid);
+            demos = demos.Where(d =>
+                filterUserIds.Contains(d.DemoAlignedByUserId) ||
+                (d.DemoDoneByUserId.HasValue && filterUserIds.Contains(d.DemoDoneByUserId.Value)));
         }
 
         // Apply date range based on demo timestamp (ScheduledAt for Scheduled, DoneAt for Completed)
@@ -244,15 +281,20 @@ public class AnalyticsController : ControllerBase
             );
         }
 
-        var grouped = await demos
+        // Materialize to memory first so that GetSizeBucket runs on the client,
+        // not inside the SQL translation (EF Core cannot translate this helper).
+        var raw = await demos
             .Where(d => d.Account != null)
             .Select(d => new
             {
                 d.Account!.NumberOfUsers
             })
+            .ToListAsync();
+
+        var grouped = raw
             .GroupBy(x => GetSizeBucket(x.NumberOfUsers))
             .Select(g => new { Size = g.Key, Count = g.Count() })
-            .ToListAsync();
+            .ToList();
 
         int little = 0, small = 0, medium = 0, enterprise = 0;
         foreach (var row in grouped)

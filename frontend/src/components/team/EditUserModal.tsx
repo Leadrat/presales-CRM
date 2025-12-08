@@ -50,7 +50,22 @@ export default function EditUserModal({ open, userId, onClose, onSaved }: Props)
     };
   }, [open, userId]);
 
-  const roleOptions = useMemo(() => roles, [roles]);
+  const roleOptions = useMemo(() => {
+    // Only allow Basic and Admin roles in the dropdown
+    const allowed = roles.filter((r) => {
+      const name = r.name.toLowerCase();
+      return name === "basic" || name === "admin";
+    });
+    // Keep a stable order: Basic first, then Admin
+    return allowed.sort((a, b) => {
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+      if (aName === bName) return 0;
+      if (aName === "basic") return -1;
+      if (bName === "basic") return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [roles]);
 
   if (!open) return null;
 
@@ -115,12 +130,15 @@ export default function EditUserModal({ open, userId, onClose, onSaved }: Props)
                 value={roleId}
                 onChange={(e) => setRoleId(e.target.value)}
               >
-                <option value="">Basic User</option>
-                {roleOptions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
+                {roleOptions.map((r) => {
+                  const nameLower = r.name.toLowerCase();
+                  const label = nameLower === "basic" ? "Basic User" : "Admin";
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

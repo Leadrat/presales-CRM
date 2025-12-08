@@ -2,11 +2,16 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
-import { ArrowLeft, Plus, Download, Circle, Trash2, FileEdit, CalendarDays, CheckCircle2, Pencil, FileText, Phone, Mail, MapPin, ExternalLink, Clock4, UserRound, Users, NotebookPen, XCircle } from "lucide-react";
+import { ArrowLeft, Plus, Download, Circle, Trash2, FileEdit, CalendarDays, CheckCircle2, Pencil, FileText, Phone, Mail, MapPin, ExternalLink, Clock4, UserRound, Users, NotebookPen, XCircle, Building2 } from "lucide-react";
 import { getAccountDetail, type AccountDetailDto, updateAccount, getAccountLookups, getAccountContacts, getAccountDemos, getAccountActivity, createAccountDemo, updateDemo, deleteDemo, softDeleteAccount, deleteContact, type AccountContactSummary, type AccountDemoSummary, type AccountActivityEntry, getUsers, type UserSummary, type DemoStatus } from "@/lib/api";
 import { AddContactModal } from "@/components/contacts/AddContactModal";
 import DateTimePicker from "@/components/form/date-time-picker";
 import { useAuth } from "@/context/AuthContext";
+import PlaceholderSelect from "@/components/form/PlaceholderSelect";
+import PlaceholderInput from "@/components/form/PlaceholderInput";
+import PhoneNumberInput from "@/components/form/PhoneNumberInput";
+import CrmProviderSelect from "@/components/form/CrmProviderSelect";
+import CrmProviderMultiSelect from "@/components/form/CrmProviderMultiSelect";
 
 const DEMO_CARD_THEME: Record<string, string> = {
   // All demo cards use the same neutral card styling; status is indicated only by the badge
@@ -46,10 +51,9 @@ type DemoCardModel = {
 };
 
 // Helper: compute account size label from numberOfUsers
-// Logic: 4-9 Little, 10-24 Small, 25-49 Medium, 50+ Enterprise
+// Updated logic: <10 no label, 10-24 Small, 25-49 Medium, 50+ Enterprise
 function computeSizeLabel(n: number | null | undefined): string {
-  if (n == null || n < 4) return "";
-  if (n <= 9) return "Little Account";
+  if (n == null || n < 10) return "";
   if (n <= 24) return "Small Account";
   if (n <= 49) return "Medium Account";
   return "Enterprise";
@@ -83,6 +87,16 @@ function formatDealStageLabel(stage: string | null | undefined): string {
     IN_PROGRESS: "In progress", WON: "Closed Won", LOST: "Closed Lost"
   };
   return map[stage] || stage;
+}
+
+// Helper: format CRM provider for display; hide sentinel values
+function formatCrmProviderDisplay(name: string | null | undefined): string {
+  if (!name) return "";
+  const trimmed = name.trim();
+  if (trimmed === "None" || trimmed === "None/Unknown") {
+    return "";
+  }
+  return trimmed;
 }
 
 // Helper: format CRM expiry for display (MM/YY)
@@ -171,6 +185,14 @@ export default function AdminAccountDetailPage() {
   const [lookups, setLookups] = useState<any>(null);
   const [teamMembers, setTeamMembers] = useState<UserSummary[]>([]);
 
+  const orderedCrmProviders =
+    lookups && lookups.crmProviders
+      ? [
+          ...lookups.crmProviders.filter((p: any) => p.name !== "None" && p.name !== "None/Unknown"),
+          ...lookups.crmProviders.filter((p: any) => p.name === "None/Unknown"),
+        ]
+      : [];
+
   // Contacts, demos, activity
   const [contacts, setContacts] = useState<AccountContactSummary[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
@@ -185,7 +207,10 @@ export default function AdminAccountDetailPage() {
   const [companyForm, setCompanyForm] = useState({
     companyName: "", accountTypeId: "", accountSizeId: "", numberOfUsers: "", websiteUrl: "", phoneNumber: "", email: "",
     decisionMakers: "", instagramHandle: "", linkedinUrl: "", createdByUserId: "", assignedToUserId: "",
-    leadSource: "", city: "", dealStage: "", crmProviderName: "", crmExpiry: "", closedDate: ""
+    leadSource: "", city: "", dealStage: "", crmProviderId: "",
+    crmProviderName: "",
+    crmProviders: [] as Array<{id: string | null; name: string}>,
+    crmExpiry: "", closedDate: ""
   });
 
   // Modals
@@ -356,11 +381,29 @@ export default function AdminAccountDetailPage() {
     loadActivity();
   }, [loadDetail, loadContacts, loadDemos, loadActivity]);
 
+  // Load lookups
+  const loadLookups = useCallback(async () => {
+    try {
+      const data = await getAccountLookups();
+      setLookups(data);
+      return data;
+    } catch (error) {
+      console.error("Error loading lookups:", error);
+      return null;
+    }
+  }, []);
+
+  // Refresh CRM providers after a new one is created
+  const refreshCrmProviders = useCallback(async () => {
+    const data = await loadLookups();
+    return data?.crmProviders || [];
+  }, [loadLookups]);
+
   // Load lookups and team members
   useEffect(() => {
-    getAccountLookups().then(setLookups).catch(() => {});
+    loadLookups();
     getUsers().then(setTeamMembers).catch(() => setTeamMembers([]));
-  }, []);
+  }, [loadLookups]);
 
   // Enter edit mode
   const enterCompanyEditMode = useCallback(() => {
@@ -381,7 +424,11 @@ export default function AdminAccountDetailPage() {
       leadSource: detail.leadSource || "",
       city: detail.city || "",
       dealStage: detail.dealStage || "",
-      crmProviderName: detail.crmProviderName || "",
+      crmProviderId: detail.currentCrmId || "", // Ensure empty string if null
+      crmProviderName: formatCrmProviderDisplay(detail.crmProviderName),
+      crmProviders: detail.currentCrmId ? 
+        [{ id: detail.currentCrmId, name: formatCrmProviderDisplay(detail.crmProviderName) }] : 
+        (detail.crmProviderName ? [{ id: null, name: formatCrmProviderDisplay(detail.crmProviderName) }] : []),
       crmExpiry: formatCrmExpiryDisplay(detail.crmExpiry) || "",
       closedDate: detail.closedDate ? detail.closedDate.split("T")[0] : ""
     });
@@ -413,6 +460,9 @@ export default function AdminAccountDetailPage() {
         crmExpiryIso = new Date(year, parseInt(mm, 10) - 1, 1).toISOString();
       } else if (companyForm.crmExpiry) {
         crmExpiryIso = companyForm.crmExpiry;
+      } else if (companyForm.crmExpiry === "") {
+        // Explicit empty string signals the backend to clear CrmExpiry
+        crmExpiryIso = "";
       }
       await updateAccount(id, {
         companyName: companyForm.companyName,
@@ -430,7 +480,11 @@ export default function AdminAccountDetailPage() {
         leadSource: companyForm.leadSource || null,
         city: companyForm.city || null,
         dealStage: companyForm.dealStage || null,
-        crmProviderName: companyForm.crmProviderName || null,
+        // Send the primary CRM (first in the list) as the main CRM
+        currentCrmId: companyForm.crmProviders.length > 0 && companyForm.crmProviders[0].id ? companyForm.crmProviders[0].id : null,
+        currentCrmName: companyForm.crmProviders.length > 0 && !companyForm.crmProviders[0].id ? companyForm.crmProviders[0].name : null,
+        // In the future, we'll update the API to accept multiple CRMs
+        // crmProviders: companyForm.crmProviders,
         crmExpiry: crmExpiryIso,
         closedDate: companyForm.closedDate || null
       });
@@ -625,11 +679,13 @@ export default function AdminAccountDetailPage() {
 
       {/* Company Information Card */}
       <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/80">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-            <FileText className="h-5 w-5" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Company Information</h2>
+        <div className="mb-5">
+          <h2 className="flex items-center gap-2 text-[0.92rem] font-semibold text-gray-900 dark:text-gray-100">
+            <span className="inline-flex h-[1.84rem] w-[1.84rem] items-center justify-center rounded-lg bg-blue-600 text-white">
+              <Building2 className="h-[1.05rem] w-[1.05rem]" />
+            </span>
+            Company Information
+          </h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           {/* Company Name */}
@@ -638,19 +694,26 @@ export default function AdminAccountDetailPage() {
             {isEditingCompany ? (
               <input className={inputClass} placeholder="e.g. Acme Corp" value={companyForm.companyName} onChange={(e) => setCompanyForm((p) => ({ ...p, companyName: e.target.value }))} />
             ) : (
-              <input className={inputClass} value={detail.companyName || ""} disabled />
+              <input className={inputClass} value={detail.companyName || ""} placeholder="e.g. Acme Corp" disabled />
             )}
           </div>
           {/* Account Type */}
           <div>
             <label className={labelClass}>Account Type <span className="text-red-500">*</span></label>
             {isEditingCompany && lookups ? (
-              <select className={inputClass} value={companyForm.accountTypeId} onChange={(e) => setCompanyForm((p) => ({ ...p, accountTypeId: e.target.value }))}>
-                <option value="">Select</option>
-                {lookups.accountTypes.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              <PlaceholderSelect
+                options={lookups.accountTypes}
+                value={companyForm.accountTypeId}
+                onChange={(value) => setCompanyForm((p) => ({ ...p, accountTypeId: value }))}
+                placeholder="Select type"
+                className={inputClass}
+                              />
             ) : (
-              <input className={inputClass} value={detail.accountTypeName || ""} disabled />
+              <PlaceholderInput
+                value={detail.accountTypeName}
+                placeholder="Select type"
+                className={inputClass}
+              />
             )}
           </div>
           {/* Number of Users */}
@@ -659,7 +722,11 @@ export default function AdminAccountDetailPage() {
             {isEditingCompany ? (
               <input className={inputClass} placeholder="e.g. 25" value={companyForm.numberOfUsers} onChange={(e) => setCompanyForm((p) => ({ ...p, numberOfUsers: e.target.value }))} />
             ) : (
-              <input className={inputClass} value={detail.numberOfUsers != null && detail.numberOfUsers > 0 ? String(detail.numberOfUsers) : ""} disabled />
+              <PlaceholderInput
+                value={detail.numberOfUsers != null && detail.numberOfUsers > 0 ? String(detail.numberOfUsers) : null}
+                placeholder="e.g. 25"
+                className={inputClass}
+              />
             )}
           </div>
           {/* Website URL */}
@@ -668,34 +735,55 @@ export default function AdminAccountDetailPage() {
             {isEditingCompany ? (
               <input className={inputClass} placeholder="https://example.com" value={companyForm.websiteUrl} onChange={(e) => setCompanyForm((p) => ({ ...p, websiteUrl: e.target.value }))} />
             ) : (
-              <input className={inputClass} value={detail.websiteUrl || detail.website || ""} disabled />
+              <PlaceholderInput
+                value={detail.websiteUrl || detail.website}
+                placeholder="https://example.com"
+                className={inputClass}
+              />
             )}
           </div>
           {/* Phone Number */}
           <div>
             <label className={labelClass}>Phone Number</label>
             {isEditingCompany ? (
-              <input className={inputClass} placeholder="+91XXXXXXXXXX" value={companyForm.phoneNumber} onChange={(e) => setCompanyForm((p) => ({ ...p, phoneNumber: e.target.value }))} />
+              <PhoneNumberInput
+                className={inputClass}
+                placeholder="Phone number"
+                value={companyForm.phoneNumber}
+                onChange={(value) => setCompanyForm((p) => ({ ...p, phoneNumber: value }))}
+              />
             ) : (
-              <input className={inputClass} value={detail.phone || ""} disabled />
+              <PlaceholderInput
+                value={detail.phone}
+                placeholder="+1 (555) 123-4567"
+                className={inputClass}
+              />
             )}
           </div>
           {/* Email */}
           <div>
             <label className={labelClass}>Email</label>
             {isEditingCompany ? (
-              <input className={inputClass} placeholder="owner@example.com" value={companyForm.email} onChange={(e) => setCompanyForm((p) => ({ ...p, email: e.target.value }))} />
+              <input className={inputClass} placeholder="contact@example.com" value={companyForm.email} onChange={(e) => setCompanyForm((p) => ({ ...p, email: e.target.value }))} />
             ) : (
-              <input className={inputClass} value={detail.email || ""} disabled />
+              <PlaceholderInput
+                value={detail.email}
+                placeholder="contact@example.com"
+                className={inputClass}
+              />
             )}
           </div>
           {/* Decision Makers */}
           <div>
             <label className={labelClass}>Decision Makers</label>
             {isEditingCompany ? (
-              <input className={inputClass} placeholder="e.g. Main owner" value={companyForm.decisionMakers} onChange={(e) => setCompanyForm((p) => ({ ...p, decisionMakers: e.target.value }))} />
+              <input className={inputClass} placeholder="e.g. CEO, CTO" value={companyForm.decisionMakers} onChange={(e) => setCompanyForm((p) => ({ ...p, decisionMakers: e.target.value }))} />
             ) : (
-              <input className={inputClass} value={detail.decisionMakers || ""} disabled />
+              <PlaceholderInput
+                value={detail.decisionMakers}
+                placeholder="e.g. CEO, CTO"
+                className={inputClass}
+              />
             )}
           </div>
           {/* Instagram Handle */}
@@ -704,16 +792,24 @@ export default function AdminAccountDetailPage() {
             {isEditingCompany ? (
               <input className={inputClass} placeholder="https://instagram.com/..." value={companyForm.instagramHandle} onChange={(e) => setCompanyForm((p) => ({ ...p, instagramHandle: e.target.value }))} />
             ) : (
-              <input className={inputClass} value={detail.instagramUrl || ""} disabled />
+              <PlaceholderInput
+                value={detail.instagramUrl}
+                placeholder="https://instagram.com/..."
+                className={inputClass}
+              />
             )}
           </div>
           {/* LinkedIn URL */}
           <div>
             <label className={labelClass}>LinkedIn URL</label>
             {isEditingCompany ? (
-              <input className={inputClass} placeholder="https://linkedin.com/..." value={companyForm.linkedinUrl} onChange={(e) => setCompanyForm((p) => ({ ...p, linkedinUrl: e.target.value }))} />
+              <input className={inputClass} placeholder="https://linkedin.com/in/..." value={companyForm.linkedinUrl} onChange={(e) => setCompanyForm((p) => ({ ...p, linkedinUrl: e.target.value }))} />
             ) : (
-              <input className={inputClass} value={detail.linkedinUrl || ""} disabled />
+              <PlaceholderInput
+                value={detail.linkedinUrl}
+                placeholder="https://linkedin.com/in/..."
+                className={inputClass}
+              />
             )}
           </div>
         </div>
@@ -726,88 +822,167 @@ export default function AdminAccountDetailPage() {
             <div>
               <label className={labelClass}>Account Created By</label>
               {isEditingCompany ? (
-                <select className={inputClass} value={companyForm.createdByUserId} onChange={(e) => setCompanyForm((p) => ({ ...p, createdByUserId: e.target.value }))}>
-                  <option value="">Select</option>
-                  {teamMembers.map((u) => <option key={u.id} value={u.id}>{u.fullName || u.email}</option>)}
-                </select>
+                <PlaceholderSelect
+                  options={teamMembers.map(u => ({ id: u.id, name: u.fullName || u.email }))}
+                  value={companyForm.createdByUserId}
+                  onChange={(value) => setCompanyForm((p) => ({ ...p, createdByUserId: value }))}
+                  placeholder="Select team member"
+                  className={inputClass}
+                />
               ) : (
-                <input className={inputClass} value={detail.createdByUserDisplayName || ""} placeholder="Select" disabled />
+                <input
+                  className={inputClass}
+                  value={detail.createdByUserDisplayName || ""}
+                  placeholder="Select"
+                  disabled
+                />
               )}
             </div>
+
             {/* Assigned To */}
             <div>
               <label className={labelClass}>Assigned To</label>
               {isEditingCompany ? (
-                <select className={inputClass} value={companyForm.assignedToUserId} onChange={(e) => setCompanyForm((p) => ({ ...p, assignedToUserId: e.target.value }))}>
-                  <option value="">Select</option>
-                  {teamMembers.map((u) => <option key={u.id} value={u.id}>{u.fullName || u.email}</option>)}
-                </select>
+                <PlaceholderSelect
+                  options={teamMembers.map(u => ({ id: u.id, name: u.fullName || u.email }))}
+                  value={companyForm.assignedToUserId}
+                  onChange={(value) => setCompanyForm((p) => ({ ...p, assignedToUserId: value }))}
+                  placeholder="Select team member"
+                  className={inputClass}
+                />
               ) : (
-                <input className={inputClass} value={detail.assignedToUserDisplayName || ""} placeholder="Select" disabled />
+                <input
+                  className={inputClass}
+                  value={detail.assignedToUserDisplayName || ""}
+                  placeholder="Select"
+                  disabled
+                />
               )}
             </div>
+
             {/* Lead Source */}
             <div>
               <label className={labelClass}>Lead Source</label>
               {isEditingCompany ? (
-                <select className={inputClass} value={companyForm.leadSource} onChange={(e) => setCompanyForm((p) => ({ ...p, leadSource: e.target.value }))}>
-                  <option value="">Select</option>
-                  <option value="LINKEDIN">LinkedIn</option>
-                  <option value="INSTAGRAM">Instagram</option>
-                  <option value="WEBSITE">Website</option>
-                  <option value="COLD_CALL">Cold call</option>
-                  <option value="FACEBOOK">Facebook</option>
-                  <option value="GOOGLE_ADS">Google Ads</option>
-                  <option value="REFERRAL">Referral</option>
-                </select>
+                <PlaceholderSelect
+                  options={[
+                    { id: "LINKEDIN", name: "LinkedIn" },
+                    { id: "INSTAGRAM", name: "Instagram" },
+                    { id: "WEBSITE", name: "Website" },
+                    { id: "COLD_CALL", name: "Cold call" },
+                    { id: "FACEBOOK", name: "Facebook" },
+                    { id: "GOOGLE_ADS", name: "Google Ads" },
+                    { id: "REFERRAL", name: "Referral" }
+                  ]}
+                  value={companyForm.leadSource}
+                  onChange={(value) => setCompanyForm((p) => ({ ...p, leadSource: value }))}
+                  placeholder="Select source"
+                  className={inputClass}
+                />
               ) : (
-                <input className={inputClass} value={formatLeadSourceLabel(detail.leadSource)} placeholder="Select" disabled />
+                <input
+                  className={inputClass}
+                  value={formatLeadSourceLabel(detail.leadSource)}
+                  placeholder="Select"
+                  disabled
+                />
               )}
             </div>
+
             {/* City */}
             <div>
               <label className={labelClass}>City</label>
               {isEditingCompany ? (
-                <input className={inputClass} placeholder="Enter city name" value={companyForm.city} onChange={(e) => setCompanyForm((p) => ({ ...p, city: e.target.value }))} />
+                <input
+                  className={inputClass}
+                  placeholder="Enter city name"
+                  value={companyForm.city}
+                  onChange={(e) => setCompanyForm((p) => ({ ...p, city: e.target.value }))}
+                />
               ) : (
-                <input className={inputClass} value={detail.city || ""} disabled />
+                <PlaceholderInput
+                  value={detail.city}
+                  placeholder="Enter city name"
+                  className={inputClass}
+                />
               )}
             </div>
+
             {/* Deal Stage */}
             <div>
               <label className={labelClass}>Deal Stage</label>
               {isEditingCompany ? (
-                <select className={inputClass} value={companyForm.dealStage} onChange={(e) => setCompanyForm((p) => ({ ...p, dealStage: e.target.value }))}>
-                  <option value="">Select</option>
-                  <option value="NEW_LEAD">New Lead</option>
-                  <option value="CONTACTED">Contacted</option>
-                  <option value="QUALIFIED">Qualified</option>
-                  <option value="IN_PROGRESS">In progress</option>
-                  <option value="WON">Closed Won</option>
-                  <option value="LOST">Closed Lost</option>
-                </select>
+                <PlaceholderSelect
+                  options={[
+                    { id: "NEW_LEAD", name: "New Lead" },
+                    { id: "CONTACTED", name: "Contacted" },
+                    { id: "QUALIFIED", name: "Qualified" },
+                    { id: "IN_PROGRESS", name: "In progress" },
+                    { id: "WON", name: "Closed Won" },
+                    { id: "LOST", name: "Closed Lost" }
+                  ]}
+                  value={companyForm.dealStage}
+                  onChange={(value) => setCompanyForm((p) => ({ ...p, dealStage: value }))}
+                  placeholder="Select stage"
+                  className={inputClass}
+                                  />
               ) : (
-                <input className={inputClass} value={formatDealStageLabel(detail.dealStage)} placeholder="New Lead" disabled />
+                <PlaceholderInput
+                  value={formatDealStageLabel(detail.dealStage)}
+                  placeholder="Select stage"
+                  className={inputClass}
+                />
               )}
             </div>
+
             {/* Current CRM */}
             <div>
               <label className={labelClass}>Current CRM</label>
-              {isEditingCompany ? (
-                <input className={inputClass} placeholder="Enter CRM name" value={companyForm.crmProviderName} onChange={(e) => setCompanyForm((p) => ({ ...p, crmProviderName: e.target.value }))} />
+              {isEditingCompany && lookups ? (
+                <CrmProviderMultiSelect
+                  options={orderedCrmProviders}
+                  values={companyForm.crmProviders}
+                  onChange={({ providers }) =>
+                    setCompanyForm((p) => ({
+                      ...p,
+                      crmProviders: providers,
+                      // For backward compatibility, also set the first CRM as the primary one
+                      crmProviderId: providers.length > 0 && providers[0].id ? providers[0].id : "",
+                      crmProviderName: providers.length > 0 && !providers[0].id ? providers[0].name : "",
+                    }))
+                  }
+                  onRefreshOptions={refreshCrmProviders}
+                  placeholder="Select or type CRM providers"
+                  className={inputClass}
+                />
               ) : (
-                <input className={inputClass} value={detail.crmProviderName || ""} disabled />
+                <PlaceholderInput
+                  value={formatCrmProviderDisplay(detail.crmProviderName)}
+                  placeholder="Select CRM provider"
+                  className={inputClass}
+                />
               )}
             </div>
+
             {/* CRM Expiry */}
             <div>
               <label className={labelClass}>CRM Expiry (MM/YY)</label>
               {isEditingCompany ? (
-                <input className={inputClass} placeholder="MM/YY" value={companyForm.crmExpiry} onChange={(e) => setCompanyForm((p) => ({ ...p, crmExpiry: e.target.value }))} />
+                <input
+                  className={inputClass}
+                  placeholder="MM/YY"
+                  value={companyForm.crmExpiry}
+                  onChange={(e) => setCompanyForm((p) => ({ ...p, crmExpiry: e.target.value }))}
+                />
               ) : (
-                <input className={inputClass} value={formatCrmExpiryDisplay(detail.crmExpiry)} disabled />
+                <PlaceholderInput
+                  value={formatCrmExpiryDisplay(detail.crmExpiry)}
+                  placeholder="MM/YY"
+                  className={inputClass}
+                />
               )}
             </div>
+
             {/* Closed Date - Only shown when Deal Stage is Won or Lost */}
             {((isEditingCompany && (companyForm.dealStage === "WON" || companyForm.dealStage === "LOST")) ||
               (!isEditingCompany && (detail.dealStage === "WON" || detail.dealStage === "LOST"))) && (
@@ -822,7 +997,7 @@ export default function AdminAccountDetailPage() {
                     enableTime={false}
                   />
                 ) : (
-                  <input className={inputClass} value={detail.closedDate ? detail.closedDate.split("T")[0] : ""} disabled />
+                  <input className={inputClass} value={detail.closedDate ? detail.closedDate.split("T")[0] : ""} placeholder="Select closed date" disabled />
                 )}
               </div>
             )}
@@ -1258,31 +1433,30 @@ export default function AdminAccountDetailPage() {
                 </div>
                 <div>
                   <label className={labelClass}>Demo Scheduled By</label>
-                  <select
-                    className={inputClass}
+                  <PlaceholderSelect
+                    options={teamMembers.map(tm => ({ id: tm.id, name: tm.fullName || tm.email }))}
                     value={demoForm.scheduledById}
-                    onChange={(e) => setDemoForm((p) => ({ ...p, scheduledById: e.target.value }))}
-                  >
-                    <option value="">{user?.fullName || "Select user"}</option>
-                    {teamMembers.map((tm) => (
-                      <option key={tm.id} value={tm.id}>{tm.fullName || tm.email}</option>
-                    ))}
-                  </select>
+                    onChange={(value) => setDemoForm((p) => ({ ...p, scheduledById: value }))}
+                    placeholder="Select user"
+                    className={inputClass}
+                                      />
                 </div>
               </div>
               {/* Demo Status */}
               <div>
                 <label className={labelClass}>Demo Status</label>
-                <select
-                  className={inputClass}
+                <PlaceholderSelect
+                  options={[
+                    { id: "Scheduled", name: "Scheduled" },
+                    { id: "Completed", name: "Completed" },
+                    { id: "Cancelled", name: "Cancelled" },
+                    { id: "NoShow", name: "No Show" }
+                  ]}
                   value={demoForm.status}
-                  onChange={(e) => setDemoForm((p) => ({ ...p, status: e.target.value as DemoStatus }))}
-                >
-                  <option value="Scheduled">Scheduled</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                  <option value="NoShow">No Show</option>
-                </select>
+                  onChange={(value) => setDemoForm((p) => ({ ...p, status: value as DemoStatus }))}
+                  placeholder="Select status"
+                  className={inputClass}
+                                  />
               </div>
               {/* Completed fields - only show when status is Completed */}
               {demoForm.status === "Completed" && (
@@ -1299,16 +1473,13 @@ export default function AdminAccountDetailPage() {
                   </div>
                   <div>
                     <label className={labelClass}>Demo Done By</label>
-                    <select
-                      className={inputClass}
+                    <PlaceholderSelect
+                      options={teamMembers.map(tm => ({ id: tm.id, name: tm.fullName || tm.email }))}
                       value={demoForm.doneById}
-                      onChange={(e) => setDemoForm((p) => ({ ...p, doneById: e.target.value }))}
-                    >
-                      <option value="">{user?.fullName || "Select user"}</option>
-                      {teamMembers.map((tm) => (
-                        <option key={tm.id} value={tm.id}>{tm.fullName || tm.email}</option>
-                      ))}
-                    </select>
+                      onChange={(value) => setDemoForm((p) => ({ ...p, doneById: value }))}
+                      placeholder="Select user"
+                      className={inputClass}
+                                          />
                   </div>
                 </div>
               )}
@@ -1393,16 +1564,23 @@ export default function AdminAccountDetailPage() {
                 </div>
                 <div>
                   <label className={labelClass}>Demo Scheduled By</label>
-                  <select
-                    className={inputClass}
-                    value={editDemoForm.scheduledById}
-                    onChange={(e) => setEditDemoForm((p) => ({ ...p, scheduledById: e.target.value }))}
-                  >
-                    <option value="">{user?.fullName || "Select user"}</option>
-                    {teamMembers.map((tm) => (
-                      <option key={tm.id} value={tm.id}>{tm.fullName || tm.email}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      className={inputClass}
+                      value={editDemoForm.scheduledById}
+                      onChange={(e) => setEditDemoForm((p) => ({ ...p, scheduledById: e.target.value }))}
+                    >
+                      <option value=""></option>
+                      {teamMembers.map((tm) => (
+                        <option key={tm.id} value={tm.id}>{tm.fullName || tm.email}</option>
+                      ))}
+                    </select>
+                    {!editDemoForm.scheduledById && (
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400 dark:text-gray-500">
+                        Select user
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               {/* Demo Status */}
@@ -1434,16 +1612,23 @@ export default function AdminAccountDetailPage() {
                   </div>
                   <div>
                     <label className={labelClass}>Demo Done By</label>
-                    <select
-                      className={inputClass}
-                      value={editDemoForm.doneById}
-                      onChange={(e) => setEditDemoForm((p) => ({ ...p, doneById: e.target.value }))}
-                    >
-                      <option value="">{user?.fullName || "Select user"}</option>
-                      {teamMembers.map((tm) => (
-                        <option key={tm.id} value={tm.id}>{tm.fullName || tm.email}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <select
+                        className={inputClass}
+                        value={editDemoForm.doneById}
+                        onChange={(e) => setEditDemoForm((p) => ({ ...p, doneById: e.target.value }))}
+                      >
+                        <option value=""></option>
+                        {teamMembers.map((tm) => (
+                          <option key={tm.id} value={tm.id}>{tm.fullName || tm.email}</option>
+                        ))}
+                      </select>
+                      {!editDemoForm.doneById && (
+                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400 dark:text-gray-500">
+                          Select user
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

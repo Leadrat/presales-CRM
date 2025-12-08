@@ -1,6 +1,14 @@
 // This file will contain only the content up to line 833 to fix the corruption
 // We'll then replace the original file with this clean version
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+
+type TabLoaderProps = {
+  label: string;
+  loading: boolean;
+  error?: string | null;
+  onLoad: () => void | Promise<void>;
+  children: ReactNode;
+};
 
 function TabLoader({ label, loading, error, onLoad, children }: TabLoaderProps) {
   useEffect(() => {

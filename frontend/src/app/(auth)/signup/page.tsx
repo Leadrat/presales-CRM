@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { signup, login } from "@/lib/api";
 import { tokenService } from "@/lib/auth/tokenService";
 import { EyeCloseIcon, EyeIcon } from "@/icons";
+import PhoneNumberInput from "@/components/form/PhoneNumberInput";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -103,24 +104,24 @@ export default function SignupPage() {
             <p className="mt-1 text-xs text-gray-500">Min 8 characters, including a letter and a number.</p>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-200">Phone (optional)</label>
-            <input
-              className="w-full rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2 text-sm text-gray-100 outline-none ring-0 focus:border-brand-500 focus:bg-gray-900 focus:ring-1 focus:ring-brand-500 placeholder:text-gray-500"
+          <div className="mb-4">
+            <label className="mb-2 block text-sm font-medium text-gray-300">Phone Number</label>
+            <PhoneNumberInput
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(value) => setPhone(value)}
               placeholder="Your phone number"
+              className="w-full rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2 text-sm text-gray-100 outline-none ring-0 focus:border-brand-500 focus:bg-gray-900 focus:ring-1 focus:ring-brand-500 placeholder:text-gray-500"
             />
           </div>
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
-            <button
-              className="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600 disabled:opacity-60"
-              disabled={loading}
-            >
-              {loading ? "Creating..." : "Create account"}
-            </button>
+          <button
+            className="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600 disabled:opacity-60"
+            disabled={loading}
+          >
+            {loading ? "Creating..." : "Create account"}
+          </button>
 
             <p className="text-center text-sm text-gray-400">
               Already have an account?{" "}

@@ -16,8 +16,9 @@
  * @returns Size label string or empty string if not classifiable
  */
 export function computeSizeLabel(n: number | null | undefined): string {
-  if (n == null || n < 4) return "";
-  if (n <= 9) return "Little Account";
+  // Updated logic: hide size label for very small accounts (< 10 users)
+  // 10–24: Small Account, 25–49: Medium Account, 50+: Enterprise
+  if (n == null || n < 10) return "";
   if (n <= 24) return "Small Account";
   if (n <= 49) return "Medium Account";
   return "Enterprise";

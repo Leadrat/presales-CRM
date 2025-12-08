@@ -61,12 +61,13 @@ builder.Services
         };
     });
 
-// Authorization & RBAC services
+// Authorization & RBAC
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(Policies.OwnedBy, policy =>
         policy.AddRequirements(new OwnershipRequirement()));
 });
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IAuthorizationHandler, Api.Authorization.Handlers.OwnershipHandler>();
@@ -77,13 +78,15 @@ var frontendOrigin = configuration["FRONTEND_ORIGIN"] ?? "http://localhost:3000"
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
-        policy.WithOrigins(frontendOrigin)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials());
+        policy
+            // In development, allow any origin so Docker and local hosts both work
+            .SetIsOriginAllowed(_ => true)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials());
 });
 
-// Application services
+// App services
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddScoped<ActivityLogService>();
@@ -93,24 +96,33 @@ builder.Services.Configure<SignupOptions>(configuration.GetSection("Signup"));
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// HTTP Pipeline
 if (app.Environment.IsDevelopment())
 {
+    // Only OpenAPI mappings
     app.MapOpenApi();
+
+    // ❌ IMPORTANT: Do NOT enable HTTPS redirect in Dev
+    // because Dev has no HTTPS endpoint configured
+}
+else
+{
+    // ✔ Enable HTTPS redirect ONLY in Production
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
 app.UseMiddleware<Api.Middleware.CorrelationIdMiddleware>();
 app.UseCors("Frontend");
 app.UseAuthentication();
 
-// Guard: block inactive or deleted users from all authenticated requests
+// Guard: block inactive or deleted users
 app.Use(async (context, next) =>
 {
     if (context.User?.Identity?.IsAuthenticated == true)
     {
         var userIdStr = context.User.FindFirst("sub")?.Value
             ?? context.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+
         if (Guid.TryParse(userIdStr, out var userId))
         {
             using var scope = context.RequestServices.CreateScope();
@@ -118,19 +130,84 @@ app.Use(async (context, next) =>
             var active = await db.Users
                 .AsNoTracking()
                 .AnyAsync(u => u.Id == userId && u.IsActive && !u.IsDeleted);
+
             if (!active)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new { error = new { code = "USER_INACTIVE", message = "User is inactive" } });
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    error = new
+                    {
+                        code = "USER_INACTIVE",
+                        message = "User is inactive"
+                    }
+                });
                 return;
             }
         }
     }
+
     await next();
 });
+
 app.UseAuthorization();
 
-
 app.MapControllers();
+
+// Seed default CRM providers if they are missing
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        if (db.Database.CanConnect())
+        {
+            var existingNames = new HashSet<string>(
+                db.CrmProviders.Select(p => p.Name).ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+            var defaultCrms = new[]
+            {
+                "Salesforce",
+                "HubSpot",
+                "Zoho CRM",
+                "Pipedrive",
+                "Freshsales",
+                "Microsoft Dynamics 365",
+                "Insightly",
+                "SugarCRM",
+                "Close",
+                "Monday Sales CRM",
+                "Copper",
+                "None"
+            };
+
+            var maxOrder = db.CrmProviders.Any() ? db.CrmProviders.Max(p => p.DisplayOrder) : 0;
+
+            foreach (var name in defaultCrms)
+            {
+                if (!existingNames.Contains(name))
+                {
+                    maxOrder++;
+                    db.CrmProviders.Add(new Api.Models.CrmProvider
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = name,
+                        DisplayOrder = maxOrder
+                    });
+                }
+            }
+
+            if (db.ChangeTracker.HasChanges())
+            {
+                db.SaveChanges();
+            }
+        }
+    }
+    catch
+    {
+        // Best-effort seed only; ignore failures during startup
+    }
+}
 
 app.Run();

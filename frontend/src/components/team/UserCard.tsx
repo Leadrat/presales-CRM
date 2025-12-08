@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Mail, Phone, User as UserIcon, MoreHorizontal, Pencil, UserX, Trash2, RotateCcw, Shield } from "lucide-react";
 import type { TeamUser } from "@/lib/api";
 import { updateUser, deleteUser } from "@/lib/api";
@@ -28,6 +28,16 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
   }, [user.fullName, user.email]);
 
   const isActive = !!user.isActive;
+
+  const deactivatedDate = React.useMemo(() => {
+    if (!user.deactivatedAt) return null;
+    const d = new Date(user.deactivatedAt);
+    if (Number.isNaN(d.getTime())) return null;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }, [user.deactivatedAt]);
 
   const { user: me } = useAuth();
   const isAdmin = (me?.role || "Basic").toLowerCase() === "admin";
@@ -58,9 +68,11 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
         <div className="pointer-events-none absolute inset-0 rounded-2xl bg-slate-100/70 dark:bg-white/5" />
       )}
       <div className="flex items-start gap-3">
-        <div className={`flex h-12 w-12 items-center justify-center rounded-full text-base font-semibold text-white shadow-sm ${
-          isActive ? "bg-gradient-to-br from-blue-500 to-indigo-600" : "bg-gray-300 text-gray-700"
-        }`}>
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-full text-base font-semibold text-white shadow-sm ${
+            isActive ? "bg-blue-600" : "bg-gray-300 text-gray-700"
+          }`}
+        >
           {initials || <UserIcon className="h-6 w-6" />}
         </div>
         <div className="flex-1 space-y-1">
@@ -73,19 +85,14 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
             >
               {name}
             </p>
-            <RoleBadge roleName={user.roleName} />
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${
-                isActive
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
-                  : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200"
-              }`}
-            >
-              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-              {isActive ? "Active" : "Inactive"}
-            </span>
+            <RoleBadge roleName={user.roleName} />
+            {!isActive && (
+              <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-900/30 dark:text-rose-200">
+                Inactive
+              </span>
+            )}
           </div>
         </div>
         {isAdmin && (
@@ -105,31 +112,25 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
         )}
       </div>
 
-      <div className={`mt-3 space-y-1 text-sm ${isActive ? "text-gray-600 dark:text-gray-300" : "text-gray-500 dark:text-gray-400"}`}>
+      <div
+        className={`mt-3 space-y-1 text-sm ${
+          isActive ? "text-gray-600 dark:text-gray-300" : "text-gray-500 dark:text-gray-400"
+        }`}
+      >
         <div className="flex items-center gap-2 truncate">
           <Mail className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-          <a
-            href={`mailto:${user.email}`}
-            className="truncate hover:text-blue-600 hover:underline dark:hover:text-blue-400"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {user.email}
-          </a>
+          <span className="truncate">{user.email}</span>
         </div>
         {user.phone && (
           <div className="flex items-center gap-2 truncate">
             <Phone className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-            <a
-              href={`tel:${user.phone}`}
-              className="truncate hover:text-blue-600 hover:underline dark:hover:text-blue-400"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {user.phone}
-            </a>
+            <span className="truncate">{user.phone}</span>
           </div>
         )}
         {!isActive && (
-          <div className="pt-1 text-xs font-medium text-rose-500">Deactivated</div>
+          <div className="pt-1 text-xs font-medium text-rose-500">
+            {deactivatedDate ? `Deactivated on: ${deactivatedDate}` : "Deactivated"}
+          </div>
         )}
       </div>
       {isAdmin && menuOpen && (
@@ -148,60 +149,6 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
             <Pencil className="h-4 w-4" />
             <span>Edit</span>
           </button>
-          {/* Quick Role Actions */}
-          {adminRoleId && basicRoleId && (
-            <>
-              {String(user.roleName || '').toLowerCase() === 'admin' ? (
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
-                  disabled={busy}
-                  onClick={async () => {
-                    if (busy) return;
-                    if (typeof window !== 'undefined') {
-                      const ok = window.confirm('Make Basic (remove Admin) for this user?');
-                      if (!ok) return;
-                    }
-                    try {
-                      setBusy(true);
-                      await updateUser(user.id, { roleId: basicRoleId });
-                      onToggled?.();
-                    } finally {
-                      setBusy(false);
-                      setMenuOpen(false);
-                    }
-                  }}
-                >
-                  <Shield className="h-4 w-4" />
-                  <span>Make Basic</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
-                  disabled={busy}
-                  onClick={async () => {
-                    if (busy) return;
-                    if (typeof window !== 'undefined') {
-                      const ok = window.confirm('Make Admin for this user?');
-                      if (!ok) return;
-                    }
-                    try {
-                      setBusy(true);
-                      await updateUser(user.id, { roleId: adminRoleId });
-                      onToggled?.();
-                    } finally {
-                      setBusy(false);
-                      setMenuOpen(false);
-                    }
-                  }}
-                >
-                  <Shield className="h-4 w-4" />
-                  <span>Make Admin</span>
-                </button>
-              )}
-            </>
-          )}
           <button
             type="button"
             className="flex w-full items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 disabled:opacity-50"
@@ -210,7 +157,7 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
               if (busy) return;
               const next = !user.isActive;
               const verb = next ? "Activate" : "Deactivate";
-              if (typeof window !== 'undefined') {
+              if (typeof window !== "undefined") {
                 const ok = window.confirm(`${verb} this user?`);
                 if (!ok) return;
               }
@@ -219,7 +166,7 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
                 await updateUser(user.id, { isActive: next });
                 onToggled?.();
               } catch (e) {
-                // no-op: page will show toast in future polish
+                // no-op for now
               } finally {
                 setBusy(false);
                 setMenuOpen(false);
@@ -235,7 +182,7 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
             disabled={busy}
             onClick={async () => {
               if (busy) return;
-              if (typeof window !== 'undefined') {
+              if (typeof window !== "undefined") {
                 const ok = window.confirm("Delete this user? This cannot be easily undone.");
                 if (!ok) return;
               }

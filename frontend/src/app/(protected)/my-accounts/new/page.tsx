@@ -7,6 +7,9 @@ import { useAuth } from "@/context/AuthContext";
 import { createAccount, getAccountLookups, type AccountLookups } from "@/lib/api";
 import { CollapsibleContact, type ContactInput } from "@/components/contacts/CollapsibleContact";
 import { AddContactModal } from "@/components/contacts/AddContactModal";
+import PlaceholderSelect from "@/components/form/PlaceholderSelect";
+import PlaceholderInput from "@/components/form/PlaceholderInput";
+import PhoneNumberInput from "@/components/form/PhoneNumberInput";
 
 export default function NewMyAccountPage() {
   const router = useRouter();
@@ -26,7 +29,6 @@ export default function NewMyAccountPage() {
   const [accountTypeId, setAccountTypeId] = useState("");
   const [accountSizeId, setAccountSizeId] = useState("");
   const [crmProviderId, setCrmProviderId] = useState("");
-  const [crmProviderName, setCrmProviderName] = useState("");
   const [numberOfUsers, setNumberOfUsers] = useState<string>("");
   const [crmExpiry, setCrmExpiry] = useState("");
   const [leadSource, setLeadSource] = useState("");
@@ -39,14 +41,21 @@ export default function NewMyAccountPage() {
   const [contacts, setContacts] = useState<ContactInput[]>([]);
   const [addContactOpen, setAddContactOpen] = useState(false);
 
+  const orderedCrmProviders =
+    lookups
+      ? [
+          ...lookups.crmProviders.filter((p) => p.name !== "None" && p.name !== "None/Unknown"),
+          ...lookups.crmProviders.filter((p) => p.name === "None/Unknown"),
+        ]
+      : [];
+
   // Compute account size label from number of users
-  // Logic: 4-9 Little, 10-24 Small, 25-49 Medium, 50+ Enterprise
+  // Updated logic: <10 no label, 10-24 Small, 25-49 Medium, 50+ Enterprise
   const computeSizeLabel = (users: string | number | null | undefined): string => {
     const numUsers = typeof users === "string" ? parseInt(users, 10) : users;
-    if (typeof numUsers !== "number" || !Number.isFinite(numUsers) || numUsers < 4) {
+    if (typeof numUsers !== "number" || !Number.isFinite(numUsers) || numUsers < 10) {
       return "";
     }
-    if (numUsers <= 9) return "Little Account";
     if (numUsers <= 24) return "Small Account";
     if (numUsers <= 49) return "Medium Account";
     return "Enterprise";
@@ -152,7 +161,6 @@ export default function NewMyAccountPage() {
         accountTypeId,
         accountSizeId: finalAccountSizeId,
         currentCrmId: crmProviderId || undefined,
-        currentCrmName: crmProviderName.trim() || undefined,
         numberOfUsers: numberOfUsers ? Number(numberOfUsers) : undefined,
         crmExpiry: crmExpiry.trim() || undefined,
         leadSource: leadSource.trim() || undefined,
@@ -265,21 +273,14 @@ export default function NewMyAccountPage() {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Account type<span className="text-red-500">*</span>
                       </label>
-                      <select
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      <PlaceholderSelect
+                        options={lookups.accountTypes}
                         value={accountTypeId}
-                        onChange={(e) => setAccountTypeId(e.target.value)}
-                        required
-                      >
-                        <option value="" disabled>
-                          Select type
-                        </option>
-                        {lookups.accountTypes.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(value) => setAccountTypeId(value)}
+                        placeholder="Select type"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                        required={true}
+                                              />
                     </div>
 
                     <div className="space-y-1.5">
@@ -309,12 +310,10 @@ export default function NewMyAccountPage() {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Phone number<span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="tel"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-900"
-                        placeholder="e.g. +91XXXXXXXXXX"
+                      <PhoneNumberInput
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        onChange={(value) => setPhone(value)}
+                        placeholder="Phone number"
                         required
                       />
                     </div>
@@ -390,20 +389,21 @@ export default function NewMyAccountPage() {
 
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lead source</label>
-                      <select
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      <PlaceholderSelect
+                        options={[
+                          { id: "LINKEDIN", name: "LinkedIn" },
+                          { id: "INSTAGRAM", name: "Instagram" },
+                          { id: "WEBSITE", name: "Website" },
+                          { id: "COLD_CALL", name: "Cold call" },
+                          { id: "FACEBOOK", name: "Facebook" },
+                          { id: "GOOGLE_ADS", name: "Google Ads" },
+                          { id: "REFERRAL", name: "Referral" }
+                        ]}
                         value={leadSource}
-                        onChange={(e) => setLeadSource(e.target.value)}
-                      >
-                        <option value="">Select source</option>
-                        <option value="LINKEDIN">LinkedIn</option>
-                        <option value="INSTAGRAM">Instagram</option>
-                        <option value="WEBSITE">Website</option>
-                        <option value="COLD_CALL">Cold call</option>
-                        <option value="FACEBOOK">Facebook</option>
-                        <option value="GOOGLE_ADS">Google Ads</option>
-                        <option value="REFERRAL">Referral</option>
-                      </select>
+                        onChange={(value) => setLeadSource(value)}
+                        placeholder="Select source"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      />
                     </div>
 
                     <div className="space-y-1.5">
@@ -419,29 +419,31 @@ export default function NewMyAccountPage() {
 
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deal stage</label>
-                      <select
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      <PlaceholderSelect
+                        options={[
+                          { id: "NEW_LEAD", name: "New Lead" },
+                          { id: "CONTACTED", name: "Contacted" },
+                          { id: "QUALIFIED", name: "Qualified" },
+                          { id: "IN_PROGRESS", name: "In progress" },
+                          { id: "WON", name: "Won" },
+                          { id: "LOST", name: "Lost" }
+                        ]}
                         value={dealStage}
-                        onChange={(e) => setDealStage(e.target.value)}
-                      >
-                        <option value="NEW_LEAD">New Lead</option>
-                        <option value="CONTACTED">Contacted</option>
-                        <option value="QUALIFIED">Qualified</option>
-                        <option value="IN_PROGRESS">In progress</option>
-                        <option value="WON">Won</option>
-                        <option value="LOST">Lost</option>
-                      </select>
+                        onChange={(value) => setDealStage(value)}
+                        placeholder="Select stage"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                                              />
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Current CRM</label>
-                      <input
-                        type="text"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-900"
-                        placeholder="Enter CRM name"
-                        value={crmProviderName}
-                        onChange={(e) => setCrmProviderName(e.target.value)}
-                      />
+                      <PlaceholderSelect
+                        options={orderedCrmProviders}
+                        value={crmProviderId}
+                        onChange={(value) => setCrmProviderId(value)}
+                        placeholder="Select CRM provider"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                                              />
                     </div>
 
                     <div className="space-y-1.5">
@@ -494,10 +496,23 @@ export default function NewMyAccountPage() {
               </form>
 
               <AddContactModal
-                isOpen={addContactOpen}
+                open={addContactOpen}
                 onClose={() => setAddContactOpen(false)}
                 onCreated={(contact) => {
-                  setContacts((prev) => [...prev, contact]);
+                  setContacts((prev) => [
+                    ...prev,
+                    {
+                      name: contact.name ?? "",
+                      email: contact.email ?? "",
+                      workPhone: contact.workPhone ?? "",
+                      personalPhone: contact.personalPhone ?? "",
+                      designation: contact.designation ?? "",
+                      city: contact.city ?? "",
+                      dateOfBirth: contact.dateOfBirth ?? "",
+                      instagramUrl: contact.instagramUrl ?? "",
+                      linkedinUrl: contact.linkedinUrl ?? "",
+                    },
+                  ]);
                 }}
               />
             </>
