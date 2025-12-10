@@ -249,22 +249,14 @@ public class AccountsController : ControllerBase
         }
 
         // Parse CrmExpiry from MM/YY into a DateTimeOffset (assume end of month, UTC) - optional
-        bool clearCrmExpiry = false;
         DateTimeOffset? crmExpiryDate = null;
-        if (request.CrmExpiry != null)
+        if (!string.IsNullOrWhiteSpace(request.CrmExpiry))
         {
-            if (string.IsNullOrWhiteSpace(request.CrmExpiry))
+            if (!DateTime.TryParseExact(request.CrmExpiry, "MM/yy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
             {
-                clearCrmExpiry = true;
+                return BadRequest(new { error = new { code = "INVALID_CRM_EXPIRY", message = "CrmExpiry must be in MM/YY format" } });
             }
-            else
-            {
-                if (!DateTime.TryParseExact(request.CrmExpiry, "MM/yy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
-                {
-                    return BadRequest(new { error = new { code = "INVALID_CRM_EXPIRY", message = "CrmExpiry must be in MM/YY format" } });
-                }
-                crmExpiryDate = new DateTimeOffset(parsedDate, TimeSpan.Zero);
-            }
+            crmExpiryDate = new DateTimeOffset(parsedDate, TimeSpan.Zero);
         }
 
         var leadSource = string.IsNullOrWhiteSpace(request.LeadSource) ? null : request.LeadSource.Trim().ToUpperInvariant();
@@ -1672,6 +1664,7 @@ public class AccountsController : ControllerBase
         var role = _current.Role ?? "Basic";
         List<Guid>? filterUserIds = null;
 
+        // Allow user filtering only for Admin users
         if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
             if (!string.IsNullOrWhiteSpace(userIds))
@@ -1685,10 +1678,7 @@ public class AccountsController : ControllerBase
                     .ToList();
             }
         }
-        else if (_current.UserId is Guid currentUserId)
-        {
-            filterUserIds = new List<Guid> { currentUserId };
-        }
+        // Basic users now see all data by default (no filtering)
 
         var accountsQuery = _db.Accounts
             .AsNoTracking()
@@ -1696,7 +1686,7 @@ public class AccountsController : ControllerBase
 
         if (filterUserIds is { Count: > 0 })
         {
-            accountsQuery = accountsQuery.Where(a => a.CreatedByUserId.HasValue && filterUserIds.Contains(a.CreatedByUserId.Value));
+            accountsQuery = accountsQuery.Where(a => filterUserIds.Contains(a.CreatedByUserId));
         }
 
         var totalAccounts = await accountsQuery.CountAsync();

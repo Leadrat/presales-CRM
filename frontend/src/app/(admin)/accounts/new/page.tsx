@@ -304,7 +304,7 @@ export default function NewAccountPage() {
                         options={lookups.accountTypes}
                         value={accountTypeId}
                         onChange={(value) => setAccountTypeId(value)}
-                        placeholder="Select type"
+                        placeholder="Select Account Type"
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
                         required={true}
                       />
@@ -424,17 +424,27 @@ export default function NewAccountPage() {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lead source</label>
                       <PlaceholderSelect
                         options={[
-                          { id: "LINKEDIN", name: "LinkedIn" },
-                          { id: "INSTAGRAM", name: "Instagram" },
-                          { id: "WEBSITE", name: "Website" },
-                          { id: "COLD_CALL", name: "Cold call" },
+                          { id: "COLD_CALL", name: "Cold Call" },
+                          { id: "DATA", name: "Data" },
+                          { id: "DIRECT", name: "Direct" },
+                          { id: "EMAIL_CAMPAIGN", name: "Email Campaign" },
+                          { id: "EVENT", name: "Event" },
                           { id: "FACEBOOK", name: "Facebook" },
                           { id: "GOOGLE_ADS", name: "Google Ads" },
-                          { id: "REFERRAL", name: "Referral" }
+                          { id: "INSTAGRAM", name: "Instagram" },
+                          { id: "IVR", name: "IVR" },
+                          { id: "LINKEDIN", name: "LinkedIn" },
+                          { id: "PARTNER", name: "Partner" },
+                          { id: "REFERRAL", name: "Referral" },
+                          { id: "WALK_IN", name: "Walk-in" },
+                          { id: "WEBSITE", name: "Website" },
+                          { id: "WHATSAPP", name: "Whatsapp" },
+                          { id: "YOUTUBE", name: "YouTube" },
+                          { id: "OTHERS", name: "Others" },
                         ]}
                         value={leadSource}
                         onChange={(value) => setLeadSource(value)}
-                        placeholder="Select source"
+                        placeholder="Select Lead Source"
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
                       />
                     </div>
@@ -456,16 +466,17 @@ export default function NewAccountPage() {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deal stage</label>
                       <PlaceholderSelect
                         options={[
-                          { id: "NEW_LEAD", name: "New Lead" },
-                          { id: "CONTACTED", name: "Contacted" },
-                          { id: "QUALIFIED", name: "Qualified" },
-                          { id: "IN_PROGRESS", name: "In progress" },
-                          { id: "WON", name: "Won" },
-                          { id: "LOST", name: "Lost" }
+                          { id: "LOST", name: "Closed Lost" },
+                          { id: "WON", name: "Closed Won" },
+                          { id: "NEGOTIATION", name: "Negotiation" },
+                          { id: "PROPOSAL", name: "Proposal" },
+                          { id: "PROSPECTING", name: "Prospecting" },
+                          { id: "QUALIFICATION", name: "Qualification" },
+                          { id: "OTHERS", name: "Others" },
                         ]}
                         value={dealStage}
                         onChange={(value) => setDealStage(value)}
-                        placeholder="Select stage"
+                        placeholder="Select Deal Stage"
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
                       />
                     </div>

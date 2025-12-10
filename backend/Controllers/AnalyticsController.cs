@@ -105,6 +105,7 @@ public class AnalyticsController : ControllerBase
         var role = _current.Role ?? "Basic";
         List<Guid>? filterUserIds = null;
 
+        // Allow user filtering only for Admin users
         if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
             if (!string.IsNullOrWhiteSpace(userIds))
@@ -122,10 +123,7 @@ public class AnalyticsController : ControllerBase
                 filterUserIds = new List<Guid> { userId.Value };
             }
         }
-        else if (_current.UserId is Guid currentUserId)
-        {
-            filterUserIds = new List<Guid> { currentUserId };
-        }
+        // Basic users now see all data by default (no filtering)
 
         var accounts = _db.Accounts
             .AsNoTracking()
@@ -133,7 +131,7 @@ public class AnalyticsController : ControllerBase
 
         if (filterUserIds is { Count: > 0 })
         {
-            accounts = accounts.Where(a => a.CreatedByUserId.HasValue && filterUserIds.Contains(a.CreatedByUserId.Value));
+            accounts = accounts.Where(a => filterUserIds.Contains(a.CreatedByUserId));
         }
 
         // If no date range is provided, return lifetime totals explicitly (mirrors dashboard-summary semantics)
@@ -239,6 +237,7 @@ public class AnalyticsController : ControllerBase
         var role = _current.Role ?? "Basic";
         List<Guid>? filterUserIds = null;
 
+        // Allow user filtering only for Admin users
         if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
             if (!string.IsNullOrWhiteSpace(userIds))
@@ -256,10 +255,7 @@ public class AnalyticsController : ControllerBase
                 filterUserIds = new List<Guid> { userId.Value };
             }
         }
-        else if (_current.UserId is Guid currentUserId)
-        {
-            filterUserIds = new List<Guid> { currentUserId };
-        }
+        // Basic users now see all data by default (no filtering)
 
         var demos = _db.Demos
             .AsNoTracking()

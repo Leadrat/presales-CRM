@@ -30,16 +30,9 @@ export const AppShellHeader: React.FC = () => {
   return (
     <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm dark:border-gray-800 dark:bg-[#020617]/90">
       <div className="flex h-14 w-full items-center justify-between px-4 lg:h-16 lg:px-8">
-        {/* Left: app title */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold tracking-tight text-gray-900 dark:text-white sm:text-base">
-            Leadrat CRM
-          </span>
-          {role === "Admin" && (
-            <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-gray-200">
-              Admin
-            </span>
-          )}
+        {/* Left: empty space */}
+        <div className="flex items-center gap-3">
+          {/* Logo and text removed */}
         </div>
 
         {/* Right: theme toggle + profile dropdown */}
@@ -99,7 +92,7 @@ export const AppShellHeader: React.FC = () => {
                   {displayName || "Signed in"}
                 </span>
                 <span className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">
-                  {role === "Admin" ? "Admin" : "Basic user"}
+                  {role === "Admin" ? "Admin" : "Basic"}
                 </span>
               </div>
             </button>

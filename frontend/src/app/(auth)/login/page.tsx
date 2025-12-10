@@ -36,6 +36,7 @@ export default function LoginPage() {
           setUser({
             id: data?.id ?? data?.data?.id ?? "",
             email: data?.email ?? data?.data?.email ?? email,
+            fullName: data?.fullName ?? data?.data?.fullName ?? undefined,
             role,
           });
           setStatus("authenticated");
