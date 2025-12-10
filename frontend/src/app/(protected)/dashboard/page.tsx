@@ -557,127 +557,153 @@ export default function DashboardPage() {
         <div className="space-y-6">
           {isAdmin && (
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-slate-900">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">View Dashboard For</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Filter these metrics by selected team members.</p>
-                </div>
-                <div className="w-full max-w-md">
-                  <div className="relative">
-                    <button
-                      type="button"
-                      disabled={userFilterLoading || teamUsers.length === 0}
-                      onClick={() => setUserFilterOpen((prev) => !prev)}
-                      className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 text-left text-sm text-gray-900 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-1 focus:ring-brand-300 disabled:cursor-not-allowed disabled:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-brand-300"
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">View Dashboard For</p>
+              </div>
+              <div className="mt-4 w-full max-w-md">
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={userFilterLoading || teamUsers.length === 0}
+                    onClick={() => setUserFilterOpen((prev) => !prev)}
+                    className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 text-left text-sm text-gray-900 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-1 focus:ring-brand-300 disabled:cursor-not-allowed disabled:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-brand-300"
+                  >
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      {isAllTeamMembersSelected || teamUsers.length === 0 ? (
+                        <span className="truncate text-gray-500 dark:text-gray-400">All team members</span>
+                      ) : (
+                        <span className="truncate text-gray-500 dark:text-gray-400">
+                          {selectedUserIds?.length || 0} members selected
+                        </span>
+                      )}
+                    </div>
+                    <svg
+                      className={`ml-2 h-4 w-4 text-gray-500 transition-transform dark:text-gray-400 ${userFilterOpen ? "rotate-180" : ""}`}
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
                     >
-                      <div className="flex min-w-0 flex-wrap gap-2">
-                        {isAllTeamMembersSelected || teamUsers.length === 0 ? (
-                          <span className="truncate text-gray-500 dark:text-gray-400">All team members</span>
-                        ) : (
-                          selectedUserIds?.slice(0, 3).map((id) => {
-                            const u = teamUsers.find((user) => user.id === id);
-                            if (!u) return null;
+                      <path
+                        d="M4.79175 7.39551L10.0001 12.6038L15.2084 7.39551"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+
+                  {userFilterOpen && (
+                    <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
+                      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">
+                        <button
+                          type="button"
+                          disabled={teamUsers.length === 0}
+                          onClick={handleSelectAll}
+                          className="text-indigo-600 hover:text-indigo-700 disabled:text-gray-400 dark:text-indigo-300 dark:hover:text-indigo-200"
+                        >
+                          Select All
+                        </button>
+                        <button
+                          type="button"
+                          disabled={teamUsers.length === 0}
+                          onClick={handleClearAll}
+                          className="text-gray-500 hover:text-gray-700 disabled:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        <ul className="divide-y divide-gray-100 text-sm dark:divide-gray-800">
+                          {teamUsers.map((u) => {
+                            const isChecked =
+                              isAllTeamMembersSelected || selectedUserIds?.includes(u.id);
                             const label = u.fullName || u.email;
                             return (
-                              <span
-                                key={id}
-                                className="flex items-center rounded-full border border-transparent bg-gray-100 px-2.5 py-0.5 text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-100"
-                              >
-                                <span className="max-w-[7rem] truncate">{label}</span>
-                              </span>
+                              <li key={u.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUserToggle(u.id)}
+                                  className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-slate-800"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`flex h-4 w-4 items-center justify-center rounded border ${
+                                        isChecked
+                                          ? "border-indigo-600 bg-indigo-600 text-white"
+                                          : "border-gray-300 bg-white text-transparent dark:border-gray-600 dark:bg-gray-900"
+                                      }`}
+                                    >
+                                      <svg
+                                        className="h-3 w-3"
+                                        viewBox="0 0 16 16"
+                                        fill="none"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                      >
+                                        <path
+                                          d="M3.5 8.5L6.5 11.5L12.5 4.5"
+                                          stroke="currentColor"
+                                          strokeWidth="1.5"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        />
+                                      </svg>
+                                    </span>
+                                    <span className="truncate text-gray-800 dark:text-gray-100">{label}</span>
+                                  </div>
+                                </button>
+                              </li>
                             );
-                          })
-                        )}
-                        {selectedUserIds && selectedUserIds.length > 3 && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">+{selectedUserIds.length - 3} more</span>
-                        )}
+                          })}
+                          {teamUsers.length === 0 && !userFilterLoading && (
+                            <li className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">No active team members found.</li>
+                          )}
+                        </ul>
                       </div>
-                      <svg
-                        className={`ml-2 h-4 w-4 text-gray-500 transition-transform dark:text-gray-400 ${userFilterOpen ? "rotate-180" : ""}`}
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          d="M4.79175 7.39551L10.0001 12.6038L15.2084 7.39551"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-
-                    {userFilterOpen && (
-                      <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
-                        <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">
-                          <button
-                            type="button"
-                            disabled={teamUsers.length === 0}
-                            onClick={handleSelectAll}
-                            className="text-indigo-600 hover:text-indigo-700 disabled:text-gray-400 dark:text-indigo-300 dark:hover:text-indigo-200"
-                          >
-                            Select All
-                          </button>
-                          <button
-                            type="button"
-                            disabled={teamUsers.length === 0}
-                            onClick={handleClearAll}
-                            className="text-gray-500 hover:text-gray-700 disabled:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200"
-                          >
-                            Clear All
-                          </button>
-                        </div>
-                        <div className="max-h-64 overflow-y-auto">
-                          <ul className="divide-y divide-gray-100 text-sm dark:divide-gray-800">
-                            {teamUsers.map((u) => {
-                              const isChecked =
-                                isAllTeamMembersSelected || selectedUserIds?.includes(u.id);
-                              const label = u.fullName || u.email;
+                      
+                      {/* Selected Pills Section */}
+                      {teamUsers.length > 0 && (
+                        <div className="border-t border-gray-200 p-3 dark:border-gray-800">
+                          <p className="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">Selected members</p>
+                          <div className="flex flex-wrap gap-2">
+                            {(isAllTeamMembersSelected ? teamUsers : (selectedUserIds || []))?.map((userOrId) => {
+                              const user = typeof userOrId === 'string' ? teamUsers.find((u) => u.id === userOrId) : userOrId;
+                              if (!user) return null;
+                              const label = user.fullName || user.email;
                               return (
-                                <li key={u.id}>
+                                <span
+                                  key={user.id}
+                                  className="flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2.5 py-1 text-xs text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                                >
+                                  <span className="max-w-[120px] truncate">{label}</span>
                                   <button
                                     type="button"
-                                    onClick={() => handleUserToggle(u.id)}
-                                    className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-slate-800"
+                                    onClick={() => handleUserToggle(user.id)}
+                                    className="flex h-3.5 w-3.5 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className={`flex h-4 w-4 items-center justify-center rounded border ${
-                                          isChecked
-                                            ? "border-indigo-600 bg-indigo-600 text-white"
-                                            : "border-gray-300 bg-white text-transparent dark:border-gray-600 dark:bg-gray-900"
-                                        }`}
-                                      >
-                                        <svg
-                                          className="h-3 w-3"
-                                          viewBox="0 0 16 16"
-                                          fill="none"
-                                          xmlns="http://www.w3.org/2000/svg"
-                                        >
-                                          <path
-                                            d="M3.5 8.5L6.5 11.5L12.5 4.5"
-                                            stroke="currentColor"
-                                            strokeWidth="1.5"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                          />
-                                        </svg>
-                                      </span>
-                                      <span className="truncate text-gray-800 dark:text-gray-100">{label}</span>
-                                    </div>
+                                    <svg
+                                      className="h-2.5 w-2.5"
+                                      viewBox="0 0 16 16"
+                                      fill="none"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                      <path
+                                        d="M12 4L4 12M4 4L12 12"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                    </svg>
                                   </button>
-                                </li>
+                                </span>
                               );
                             })}
-                            {teamUsers.length === 0 && !userFilterLoading && (
-                              <li className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">No active team members found.</li>
-                            )}
-                          </ul>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                   {userFilterError && (
                     <p className="mt-2 text-xs text-red-600 dark:text-red-400">{userFilterError}</p>
                   )}

@@ -1,13 +1,25 @@
 import { API_BASE } from "../api";
 
-let accessToken: string | null = null;
-let refreshToken: string | null = null;
-let refreshTimeoutId: number | null = null;
-let broadcastChannel: BroadcastChannel | null = null;
-
+// Helper function to check if we're in a browser environment
 function isBrowser() {
   return typeof window !== "undefined";
 }
+
+// Initialize from localStorage if available
+let accessToken: string | null = null;
+let refreshToken: string | null = null;
+
+// Load tokens from localStorage on initialization
+if (isBrowser()) {
+  try {
+    accessToken = localStorage.getItem('accessToken');
+    refreshToken = localStorage.getItem('refreshToken');
+  } catch (e) {
+    // Ignore localStorage errors
+  }
+}
+let refreshTimeoutId: number | null = null;
+let broadcastChannel: BroadcastChannel | null = null;
 
 // Detect basePath from current URL pathname
 function getBasePath(): string {
@@ -88,6 +100,17 @@ export const tokenService = {
   setTokens(newAccessToken: string, newRefreshToken: string) {
     accessToken = newAccessToken;
     refreshToken = newRefreshToken;
+    
+    // Store in localStorage for persistence
+    if (isBrowser()) {
+      try {
+        localStorage.setItem('accessToken', newAccessToken);
+        localStorage.setItem('refreshToken', newRefreshToken);
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    
     scheduleProactiveRefresh();
   },
 
@@ -137,9 +160,13 @@ export const tokenService = {
     }
     try {
       if (isBrowser()) {
+        // Clear tokens from localStorage
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
         sessionStorage.removeItem("dashboard_user_filter");
       }
     } catch {
+      // Ignore storage errors
     }
   },
 

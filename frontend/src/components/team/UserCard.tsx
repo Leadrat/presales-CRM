@@ -89,7 +89,7 @@ export function UserCard({ user, onEdit, onToggled, onDeleted, adminRoleId, basi
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <RoleBadge roleName={user.roleName} />
             {!isActive && (
-              <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-900/30 dark:text-rose-200">
+              <span className="inline-flex items-center rounded-md bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-900/30 dark:text-rose-200">
                 Inactive
               </span>
             )}

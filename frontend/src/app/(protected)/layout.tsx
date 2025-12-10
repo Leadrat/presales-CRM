@@ -24,9 +24,25 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       <div className="flex h-screen overflow-hidden bg-slate-50 text-gray-900 dark:bg-[#020617] dark:text-gray-100">
         {/* Sidebar (fixed) */}
         <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-shrink-0 flex-col border-r border-gray-200 bg-white px-4 py-6 text-gray-900 dark:border-gray-800 dark:bg-[#020617] dark:text-gray-100">
-          <div className="mb-8 flex items-center gap-2 px-2">
-            <div className="h-8 w-8 rounded-xl bg-brand-500" />
-            <span className="text-sm font-semibold tracking-tight text-gray-900 dark:text-white">Leadrat CRM</span>
+          <div className="mb-8 flex items-center gap-3 px-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                className="h-6 w-6 text-white"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <circle cx="12" cy="12" r="6" strokeOpacity="0.6" />
+                <circle cx="12" cy="12" r="9" strokeOpacity="0.3" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white">ABM CRM</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Sales Intelligence</p>
+            </div>
           </div>
 
           <nav className="space-y-1 text-base font-medium">
@@ -35,8 +51,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
               onClick={() => router.push("/dashboard")}
               className={`menu-item rounded-xl px-3 py-2 ${
                 isDashboard
-                  ? "menu-item-active bg-slate-900 text-white dark:bg-white/5 dark:text-white"
-                  : "menu-item-inactive text-gray-700 hover:bg-slate-50 dark:text-gray-300"
+                  ? "menu-item-active bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/20 dark:text-blue-300"
+                  : "menu-item-inactive text-gray-700 hover:bg-blue-50 hover:text-blue-700 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-300"
               }`}
             >
               <span className="flex items-center gap-3">
@@ -52,8 +68,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 onClick={() => router.push("/my-accounts")}
                 className={`menu-item rounded-xl px-3 py-2 ${
                   isMyAccounts
-                    ? "menu-item-active bg-slate-900 text-white dark:bg-white/5 dark:text-white"
-                    : "menu-item-inactive text-gray-700 hover:bg-slate-50 dark:text-gray-300"
+                    ? "menu-item-active bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/20 dark:text-blue-300"
+                    : "menu-item-inactive text-gray-700 hover:bg-blue-50 hover:text-blue-700 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-300"
                 }`}
               >
                 <span className="flex items-center gap-3">
@@ -70,8 +86,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 onClick={() => router.push("/accounts")}
                 className={`menu-item rounded-xl px-3 py-2 ${
                   isAccounts
-                    ? "menu-item-active bg-slate-900 text-white dark:bg-white/5 dark:text-white"
-                    : "menu-item-inactive text-gray-700 hover:bg-slate-50 dark:text-gray-300"
+                    ? "menu-item-active bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/20 dark:text-blue-300"
+                    : "menu-item-inactive text-gray-700 hover:bg-blue-50 hover:text-blue-700 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-300"
                 }`}
               >
                 <span className="flex items-center gap-3">
@@ -87,8 +103,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
               onClick={() => router.push("/team")}
               className={`menu-item rounded-xl px-3 py-2 ${
                 isTeam
-                  ? "menu-item-active bg-slate-900 text-white dark:bg-white/5 dark:text-white"
-                  : "menu-item-inactive text-gray-700 hover:bg-slate-50 dark:text-gray-300"
+                  ? "menu-item-active bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/20 dark:text-blue-300"
+                  : "menu-item-inactive text-gray-700 hover:bg-blue-50 hover:text-blue-700 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-300"
               }`}
             >
               <span className="flex items-center gap-3">

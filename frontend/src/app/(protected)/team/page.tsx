@@ -118,20 +118,17 @@ export default function TeamPage() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm dark:bg-white/10">
-                <Users className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-50">Team Management</h1>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  View everyone on your team with roles and contact details.
+              <div className="space-y-1.5">
+                <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-50">Team Management</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Manage team members and assign roles.
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1 text-xs font-medium shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white p-1 text-xs font-medium shadow-sm dark:border-gray-800 dark:bg-gray-900">
               {STATUS_OPTIONS.map((opt) => {
                 const isActive = status === opt.value;
                 return (
@@ -139,7 +136,7 @@ export default function TeamPage() {
                     key={opt.value}
                     type="button"
                     onClick={() => handleStatusChange(opt.value)}
-                    className={`flex items-center rounded-full px-3 py-1 transition text-xs ${
+                    className={`flex items-center rounded-md px-3 py-1 transition text-xs ${
                       isActive
                         ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-950"
                         : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800/70"

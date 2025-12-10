@@ -132,7 +132,7 @@ export default function EditUserModal({ open, userId, onClose, onSaved }: Props)
               >
                 {roleOptions.map((r) => {
                   const nameLower = r.name.toLowerCase();
-                  const label = nameLower === "basic" ? "Basic User" : "Admin";
+                  const label = nameLower === "basic" ? "Basic" : "Admin";
                   return (
                     <option key={r.id} value={r.id}>
                       {label}

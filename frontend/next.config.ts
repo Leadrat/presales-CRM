@@ -12,14 +12,14 @@ if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
 }
 `;
 
+// Only use basePath and assetPrefix in production
+const isProd = process.env.NODE_ENV === 'production';
+
 const nextConfig: NextConfig = {
-  eslint: {
-    // Don't fail the production build on ESLint errors
-    ignoreDuringBuilds: true,
-  },
+  // ESLint configuration
   output: "standalone",
-  basePath: "/presales",
-  assetPrefix: "/presales",
+  basePath: isProd ? "/presales" : "",
+  assetPrefix: isProd ? "/presales" : "",
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://148.113.37.231/presales-api',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5033',
   },
   webpack(config) {
     config.module.rules.push({

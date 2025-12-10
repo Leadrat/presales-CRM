@@ -221,9 +221,12 @@ public class UsersController : ControllerBase
         }
 
         var role = _current.Role ?? "Basic";
-        if (!string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+        var currentUserId = _current.UserId.Value;
+        
+        // Allow Admin users to edit anyone, or users to edit themselves
+        if (!string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) && id != currentUserId)
         {
-            return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "Only admins can modify users" } });
+            return StatusCode(403, new { error = new { code = "FORBIDDEN", message = "Only admins can modify other users" } });
         }
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
