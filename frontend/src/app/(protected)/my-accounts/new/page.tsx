@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Save, ArrowLeft, Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { createAccount, getAccountLookups, type AccountLookups } from "@/lib/api";
+import { createAccount, getAccountLookups, getUsers, type AccountLookups, type UserSummary } from "@/lib/api";
 import { CollapsibleContact, type ContactInput } from "@/components/contacts/CollapsibleContact";
 import { AddContactModal } from "@/components/contacts/AddContactModal";
 import PlaceholderSelect from "@/components/form/PlaceholderSelect";
@@ -16,6 +16,7 @@ export default function NewMyAccountPage() {
   const { user, status } = useAuth();
 
   const [lookups, setLookups] = useState<AccountLookups | null>(null);
+  const [teamMembers, setTeamMembers] = useState<UserSummary[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
@@ -27,6 +28,8 @@ export default function NewMyAccountPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [accountTypeId, setAccountTypeId] = useState("");
+  const [createdById, setCreatedById] = useState(user?.id || "");
+  const [assignedToId, setAssignedToId] = useState(user?.id || "");
   const [accountSizeId, setAccountSizeId] = useState("");
   const [crmProviderId, setCrmProviderId] = useState("");
   const [numberOfUsers, setNumberOfUsers] = useState<string>("");
@@ -118,6 +121,34 @@ export default function NewMyAccountPage() {
     };
   }, [status]);
 
+  // Load team members for created-by and assigned-to dropdowns
+  const loadTeamMembers = useCallback(async () => {
+    try {
+      const users = await getUsers();
+      setTeamMembers(users);
+    } catch (error) {
+      console.error("Failed to load team members", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      void loadTeamMembers();
+    }
+  }, [status, loadTeamMembers]);
+
+  // Default createdBy / assignedTo to the logged-in user once data is ready
+  useEffect(() => {
+    if (status !== "authenticated" || !user || teamMembers.length === 0) return;
+
+    if (!createdById) {
+      setCreatedById(user.id);
+    }
+    if (!assignedToId) {
+      setAssignedToId(user.id);
+    }
+  }, [status, user, teamMembers, createdById, assignedToId]);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -171,6 +202,8 @@ export default function NewMyAccountPage() {
         phone: phone.trim(),
         email: email.trim(),
         city: city.trim() || undefined,
+        createdByUserId: createdById || undefined,
+        assignedToUserId: assignedToId || undefined,
         contacts:
           preparedContacts.length > 0
             ? preparedContacts.map((c) => ({
@@ -376,15 +409,24 @@ export default function NewMyAccountPage() {
                   <div className="mt-4 grid gap-4 sm:grid-cols-3">
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account created by</label>
-                      <select
+                      <PlaceholderSelect
+                        options={teamMembers.map((tm) => ({ id: tm.id, name: tm.fullName || tm.email || "" }))}
+                        value={createdById}
+                        onChange={(value) => setCreatedById(value)}
+                        placeholder="Select user"
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
-                        value={user?.id || ""}
-                        disabled
-                      >
-                        <option value={user?.id || ""}>
-                          {user?.fullName && user.fullName.trim().length > 0 ? user.fullName : user?.email || "-"}
-                        </option>
-                      </select>
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Assigned to</label>
+                      <PlaceholderSelect
+                        options={teamMembers.map((tm) => ({ id: tm.id, name: tm.fullName || tm.email || "" }))}
+                        value={assignedToId}
+                        onChange={(value) => setAssignedToId(value)}
+                        placeholder="Select user"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      />
                     </div>
 
                     <div className="space-y-1.5">
@@ -431,13 +473,14 @@ export default function NewMyAccountPage() {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deal stage</label>
                       <PlaceholderSelect
                         options={[
-                          { id: "LOST", name: "Closed Lost" },
-                          { id: "WON", name: "Closed Won" },
-                          { id: "NEGOTIATION", name: "Negotiation" },
-                          { id: "PROPOSAL", name: "Proposal" },
-                          { id: "PROSPECTING", name: "Prospecting" },
+                          { id: "NEW_LEAD", name: "New Lead" },
                           { id: "QUALIFICATION", name: "Qualification" },
-                          { id: "OTHERS", name: "Others" },
+                          { id: "DEMO_SCHEDULED", name: "Demo Scheduled" },
+                          { id: "DEMO_DONE", name: "Demo Done" },
+                          { id: "PROPOSAL_SENT", name: "Proposal Sent" },
+                          { id: "NEGOTIATION", name: "Negotiation" },
+                          { id: "WON", name: "Closed Won" },
+                          { id: "LOST", name: "Closed Lost" },
                         ]}
                         value={dealStage}
                         onChange={(value) => setDealStage(value)}

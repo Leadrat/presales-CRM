@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Save, ArrowLeft, Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { createAccount, getAccountLookups, type AccountLookups } from "@/lib/api";
+import { createAccount, getAccountLookups, getUsers, type AccountLookups, type UserSummary } from "@/lib/api";
 import { CollapsibleContact, type ContactInput } from "@/components/contacts/CollapsibleContact";
 import { AddContactModal } from "@/components/contacts/AddContactModal";
 import PlaceholderSelect from "@/components/form/PlaceholderSelect";
@@ -18,7 +18,7 @@ export default function NewAccountPage() {
   const { user, status } = useAuth();
 
   const [lookups, setLookups] = useState<AccountLookups | null>(null);
-  const [teamMembers, setTeamMembers] = useState<{ id: string; fullName?: string; email?: string }[]>([]);
+  const [teamMembers, setTeamMembers] = useState<UserSummary[]>([]);
   const [orderedCrmProviders, setOrderedCrmProviders] = useState<Array<{id: string; name: string}>>([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -32,6 +32,7 @@ export default function NewAccountPage() {
   const [email, setEmail] = useState("");
   const [accountTypeId, setAccountTypeId] = useState("");
   const [createdById, setCreatedById] = useState(user?.id || "");
+  const [assignedToId, setAssignedToId] = useState(user?.id || "");
   const [accountSizeId, setAccountSizeId] = useState("");
   const [crmProviderId, setCrmProviderId] = useState("");
   const [crmProviderName, setCrmProviderName] = useState("");
@@ -72,12 +73,23 @@ export default function NewAccountPage() {
 
   // Get badge styling based on account size label (matches detail page style)
   const accountSizeTagClass = (label: string) => {
-    const base = "inline-flex items-center justify-center rounded-lg px-5 py-1.5 text-base font-medium border";
-    if (label.includes("Small")) return `${base} border-green-400 bg-green-50 text-green-600 dark:border-green-600 dark:bg-green-900/30 dark:text-green-400`;
-    if (label.includes("Medium")) return `${base} border-amber-400 bg-amber-50 text-amber-600 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-400`;
-    if (label.includes("Enterprise")) return `${base} border-purple-400 bg-purple-50 text-purple-600 dark:border-purple-600 dark:bg-purple-900/30 dark:text-purple-400`;
+    const base = "inline-flex items-center rounded-lg border px-6 py-2.5 text-lg font-semibold shadow";
+    if (label.includes("Enterprise")) {
+      return `${base} border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/25 dark:text-purple-300`;
+    }
+    if (label.includes("Medium")) {
+      return `${base} border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/25 dark:text-amber-300`;
+    }
+    if (label.includes("Small")) {
+      return `${base} border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/25 dark:text-green-300`;
+    }
+    if (label.includes("Little")) {
+      return `${base} border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-900/25 dark:text-cyan-300`;
+    }
     return "hidden";
   };
+
+  // No need to redirect admins since we're already in the admin route
 
   // Redirect unauthenticated users to login
   useEffect(() => {
@@ -112,11 +124,8 @@ export default function NewAccountPage() {
   // Load team members
   const loadTeamMembers = useCallback(async () => {
     try {
-      const response = await fetch("/api/users");
-      if (response.ok) {
-        const users = await response.json();
-        setTeamMembers(users);
-      }
+      const users = await getUsers();
+      setTeamMembers(users);
     } catch (error) {
       console.error("Error fetching team members:", error);
     }
@@ -128,39 +137,33 @@ export default function NewAccountPage() {
     loadTeamMembers();
   }, [loadLookups, loadTeamMembers]);
 
+  // Default createdBy / assignedTo to the logged-in user once data is ready
+  useEffect(() => {
+    if (status !== "authenticated" || !user || teamMembers.length === 0) return;
+
+    if (!createdById) {
+      setCreatedById(user.id);
+    }
+    if (!assignedToId) {
+      setAssignedToId(user.id);
+    }
+  }, [status, user, teamMembers, createdById, assignedToId]);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
 
-    if (!companyName.trim()) {
-      setSubmitError("Company name is required");
-      return;
-    }
-    if (!accountTypeId) {
-      setSubmitError("Please select account type");
-      return;
-    }
+    if (!companyName.trim()) return setSubmitError("Company name is required");
+    if (!accountTypeId) return setSubmitError("Please select account type");
     // Auto-select first account size from lookups if not set (backend computes actual size from numberOfUsers)
     let finalAccountSizeId = accountSizeId;
     if (!finalAccountSizeId && lookups && lookups.accountSizes.length > 0) {
       finalAccountSizeId = lookups.accountSizes[0].id;
     }
-    if (!finalAccountSizeId) {
-      setSubmitError("Please select account size");
-      return;
-    }
-    if (!decisionMakers.trim()) {
-      setSubmitError("Decision makers are required");
-      return;
-    }
-    if (!phone.trim()) {
-      setSubmitError("Phone number is required");
-      return;
-    }
-    if (!email.trim()) {
-      setSubmitError("Email is required");
-      return;
-    }
+    if (!finalAccountSizeId) return setSubmitError("Please select account size");
+    if (!decisionMakers.trim()) return setSubmitError("Decision makers are required");
+    if (!phone.trim()) return setSubmitError("Phone number is required");
+    if (!email.trim()) return setSubmitError("Email is required");
 
     setSubmitting(true);
     try {
@@ -188,11 +191,7 @@ export default function NewAccountPage() {
         website: website.trim() || undefined,
         accountTypeId,
         accountSizeId: finalAccountSizeId,
-        // Send the primary CRM (first in the list) as the main CRM
-        currentCrmId: selectedCrmProviders.length > 0 && selectedCrmProviders[0].id ? selectedCrmProviders[0].id : undefined,
-        currentCrmName: selectedCrmProviders.length > 0 && !selectedCrmProviders[0].id ? selectedCrmProviders[0].name : undefined,
-        // In the future, we'll update the API to accept multiple CRMs
-        // crmProviders: selectedCrmProviders,
+        currentCrmId: crmProviderId || undefined,
         numberOfUsers: numberOfUsers ? Number(numberOfUsers) : undefined,
         crmExpiry: crmExpiry.trim() || undefined,
         leadSource: leadSource.trim() || undefined,
@@ -203,6 +202,8 @@ export default function NewAccountPage() {
         phone: phone.trim(),
         email: email.trim(),
         city: city.trim() || undefined,
+        createdByUserId: createdById || undefined,
+        assignedToUserId: assignedToId || undefined,
         contacts:
           preparedContacts.length > 0
             ? preparedContacts.map((c) => ({
@@ -219,9 +220,7 @@ export default function NewAccountPage() {
             : undefined,
       });
 
-      if (!payload?.id) {
-        throw new Error("Account created but no ID returned");
-      }
+      if (!payload?.id) throw new Error("Account created but no ID returned");
 
       router.push(`/accounts/${payload.id}`);
     } catch (err: any) {
@@ -240,47 +239,55 @@ export default function NewAccountPage() {
       </div>
     );
   }
+  if (status === "unauthenticated") return null;
 
-  // While redirects are in progress, render nothing for unauthenticated users
-  if (status === "unauthenticated") {
-    return null;
-  }
-  
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 text-gray-900 dark:bg-slate-950 dark:text-gray-100 lg:px-8 lg:py-8">
-      <div className="mx-auto w-full max-w-4xl">
-        <div className="flex items-center gap-3">
-          {(() => {
-            const sizeLabel = computeSizeLabel(numberOfUsers);
-            return sizeLabel ? (
-              <span className={accountSizeTagClass(sizeLabel)}>{sizeLabel}</span>
-            ) : null;
-          })()}
+    <div className="min-h-screen bg-slate-50 px-4 py-6 text-gray-900 dark:bg-slate-950 dark:text-gray-100 lg:px-10 lg:py-8">
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        {/* Page header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="mt-1 inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200"
+              aria-label="Go back"
+              title="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="flex flex-col gap-1">
+              <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-50">New Account</h1>
+              <p className="mt-1 text-base text-gray-600 dark:text-gray-400">Create a new account</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {(() => {
+              const sizeLabel = computeSizeLabel(numberOfUsers);
+              return sizeLabel ? (
+                <span className={accountSizeTagClass(sizeLabel)}>{sizeLabel}</span>
+              ) : null;
+            })()}
+          </div>
         </div>
 
         {/* Card */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-md dark:border-gray-800 dark:bg-gray-900/80">
-          {loadingLookups && (
-            <p className="text-sm text-gray-600 dark:text-gray-400">Loading account lookups...</p>
-          )}
-
-          {!loadingLookups && lookupError && (
-            <p className="text-sm text-red-600 dark:text-red-400">{lookupError}</p>
-          )}
+          {loadingLookups && <p className="text-sm text-gray-600 dark:text-gray-400">Loading account lookups...</p>}
+          {!loadingLookups && lookupError && <p className="text-sm text-red-600 dark:text-red-400">{lookupError}</p>}
 
           {!loadingLookups && !lookupError && lookups && (
             <>
               <form onSubmit={onSubmit} className="space-y-8">
-                {/* Company Information block */}
+                {/* Company Information */}
                 <div>
-                  <div className="mb-5 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-                      <Building2 className="h-5 w-5" />
-                    </div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Company Information</h2>
-                  </div>
+                  <h2 className="flex items-center gap-2 text-[0.92rem] font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="inline-flex h-[1.84rem] w-[1.84rem] items-center justify-center rounded-lg bg-blue-600 text-white">
+                      <Building2 className="h-[1.05rem] w-[1.05rem]" />
+                    </span>
+                    Company Information
+                  </h2>
                   <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                    {/* Company name */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Company name<span className="text-red-500">*</span>
@@ -295,7 +302,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Account type */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Account type<span className="text-red-500">*</span>
@@ -310,7 +316,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Number of users */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Number of users</label>
                       <input
@@ -323,7 +328,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Website */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Website URL</label>
                       <input
@@ -335,7 +339,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Phone number */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Phone number<span className="text-red-500">*</span>
@@ -348,7 +351,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Email */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Email<span className="text-red-500">*</span>
@@ -363,7 +365,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Decision makers */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Decision makers<span className="text-red-500">*</span>
@@ -378,7 +379,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Instagram Handle */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Instagram Handle</label>
                       <input
@@ -390,7 +390,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* LinkedIn URL */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">LinkedIn URL</label>
                       <input
@@ -404,11 +403,10 @@ export default function NewAccountPage() {
                   </div>
                 </div>
 
-                {/* Sales Information block */}
+                {/* Sales Information */}
                 <div className="border-t border-gray-200 pt-4 dark:border-gray-800">
                   <h2 className="text-[0.92rem] font-semibold text-gray-900 dark:text-gray-100">Sales Information</h2>
                   <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                    {/* Account created by */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account created by</label>
                       <PlaceholderSelect
@@ -419,7 +417,18 @@ export default function NewAccountPage() {
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
                       />
                     </div>
-                    {/* Lead Source */}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Assigned to</label>
+                      <PlaceholderSelect
+                        options={teamMembers.map(tm => ({ id: tm.id, name: tm.fullName || tm.email || '' }))}
+                        value={assignedToId}
+                        onChange={(value) => setAssignedToId(value)}
+                        placeholder="Select user"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
+                      />
+                    </div>
+
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lead source</label>
                       <PlaceholderSelect
@@ -449,7 +458,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* City */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">City</label>
                       <input
@@ -461,18 +469,18 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Deal stage */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deal stage</label>
                       <PlaceholderSelect
                         options={[
-                          { id: "LOST", name: "Closed Lost" },
-                          { id: "WON", name: "Closed Won" },
-                          { id: "NEGOTIATION", name: "Negotiation" },
-                          { id: "PROPOSAL", name: "Proposal" },
-                          { id: "PROSPECTING", name: "Prospecting" },
+                          { id: "NEW_LEAD", name: "New Lead" },
                           { id: "QUALIFICATION", name: "Qualification" },
-                          { id: "OTHERS", name: "Others" },
+                          { id: "DEMO_SCHEDULED", name: "Demo Scheduled" },
+                          { id: "DEMO_DONE", name: "Demo Done" },
+                          { id: "PROPOSAL_SENT", name: "Proposal Sent" },
+                          { id: "NEGOTIATION", name: "Negotiation" },
+                          { id: "WON", name: "Closed Won" },
+                          { id: "LOST", name: "Closed Lost" },
                         ]}
                         value={dealStage}
                         onChange={(value) => setDealStage(value)}
@@ -481,7 +489,6 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* Current CRM */}
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Current CRM</label>
                       <CrmProviderMultiSelect
@@ -506,11 +513,8 @@ export default function NewAccountPage() {
                       />
                     </div>
 
-                    {/* CRM expiry */}
                     <div className="space-y-1.5">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        CRM Expiry (MM/YY)
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">CRM Expiry (MM/YY)</label>
                       <input
                         type="text"
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-900"
@@ -522,7 +526,7 @@ export default function NewAccountPage() {
                   </div>
                 </div>
 
-                {/* Initial contacts for this account (header removed per request) */}
+                {/* Contacts list (header and add button removed) */}
                 <div className="mt-6 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-800">
                   {contacts.length > 0 && (
                     <div className="space-y-3">
@@ -544,9 +548,7 @@ export default function NewAccountPage() {
                   )}
                 </div>
 
-                {submitError && (
-                  <p className="text-sm text-red-600 dark:text-red-400">{submitError}</p>
-                )}
+                {submitError && <p className="text-sm text-red-600 dark:text-red-400">{submitError}</p>}
 
                 <div className="flex items-center justify-end gap-3">
                   <button
@@ -564,17 +566,20 @@ export default function NewAccountPage() {
                 open={addContactOpen}
                 onClose={() => setAddContactOpen(false)}
                 onCreated={(contact) => {
-                  setContacts((prev) => [...prev, { 
-                    name: contact.name, 
-                    email: contact.email || "", 
-                    workPhone: contact.workPhone || "",
-                    personalPhone: contact.personalPhone || "",
-                    designation: contact.designation || "",
-                    city: contact.city || "",
-                    dateOfBirth: contact.dateOfBirth || "",
-                    instagramUrl: contact.instagramUrl || "",
-                    linkedinUrl: contact.linkedinUrl || ""
-                  }]);
+                  setContacts((prev) => [
+                    ...prev,
+                    {
+                      name: contact.name ?? "",
+                      email: contact.email ?? "",
+                      workPhone: contact.workPhone ?? "",
+                      personalPhone: contact.personalPhone ?? "",
+                      designation: contact.designation ?? "",
+                      city: contact.city ?? "",
+                      dateOfBirth: contact.dateOfBirth ?? "",
+                      instagramUrl: contact.instagramUrl ?? "",
+                      linkedinUrl: contact.linkedinUrl ?? "",
+                    },
+                  ]);
                 }}
               />
             </>

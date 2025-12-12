@@ -1,6 +1,6 @@
 import { fetchWithAuth } from "./api/fetchWithAuth";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5033";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5034";
 
 export async function signup(input: { fullName: string; email: string; password: string; phone?: string }) {
   const res = await fetch(`${API_BASE}/api/auth/signup`, {
@@ -442,6 +442,54 @@ export async function getDemosBySize(params: {
     medium: Number(data.medium ?? 0),
     enterprise: Number(data.enterprise ?? 0),
   };
+}
+
+// Spec 023/024: Leaderboard helpers
+
+export type LeaderboardDemoBreakdown = {
+  small: number;
+  medium: number;
+  enterprise: number;
+};
+
+export type LeaderboardUserRow = {
+  userId: string;
+  name: string;
+  accountsCreated: number;
+  demos: LeaderboardDemoBreakdown;
+  points: number;
+};
+
+export type LeaderboardResponse = {
+  period: "weekly" | "monthly" | "quarterly";
+  startDate: string; // YYYY-MM-DD (UTC-based)
+  endDate: string;   // YYYY-MM-DD (UTC-based)
+  users: LeaderboardUserRow[];
+  scoring: {
+    accountCreated: number;
+    demoSmall: number;
+    demoMedium: number;
+    demoEnterprise: number;
+  };
+};
+
+export async function getLeaderboard(period: "weekly" | "monthly" | "quarterly"): Promise<LeaderboardResponse> {
+  const search = new URLSearchParams();
+  search.set("period", period);
+
+  const url = `${API_BASE}/api/leaderboard?${search.toString()}`;
+  const res = await fetchWithAuth(url, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload?.error?.message || "Failed to load leaderboard");
+  }
+
+  const data = (payload?.data ?? payload ?? {}) as LeaderboardResponse;
+  return data;
 }
 
 export async function getAccount(id: string) {

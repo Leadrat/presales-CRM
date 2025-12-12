@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 import { ArrowLeft, Plus, Download, Circle, Trash2, FileEdit, CalendarDays, CheckCircle2, Pencil, FileText, Phone, Mail, MapPin, ExternalLink, Clock4, UserRound, Users, NotebookPen, XCircle, Building2 } from "lucide-react";
 import { getAccountDetail, type AccountDetailDto, updateAccount, getAccountLookups, getAccountContacts, getAccountDemos, getAccountActivity, createAccountDemo, updateDemo, deleteDemo, softDeleteAccount, deleteContact, type AccountContactSummary, type AccountDemoSummary, type AccountActivityEntry, getUsers, type UserSummary, type DemoStatus } from "@/lib/api";
+import { computeSizeLabel, accountSizeTagClass } from "@/lib/account-utils";
 import { AddContactModal } from "@/components/contacts/AddContactModal";
 import DateTimePicker from "@/components/form/date-time-picker";
 import { useAuth } from "@/context/AuthContext";
@@ -50,25 +51,6 @@ type DemoCardModel = {
   original: AccountDemoSummary;
 };
 
-// Helper: compute account size label from numberOfUsers
-// Updated logic: <10 no label, 10-24 Small, 25-49 Medium, 50+ Enterprise
-function computeSizeLabel(n: number | null | undefined): string {
-  if (n == null || n < 10) return "";
-  if (n <= 24) return "Small Account";
-  if (n <= 49) return "Medium Account";
-  return "Enterprise";
-}
-
-// Helper: badge class for account size - styled like screenshot
-function accountSizeTagClass(label: string): string {
-  const base = "inline-flex items-center justify-center rounded-lg px-5 py-1.5 text-base font-medium border";
-  if (label.includes("Little")) return `${base} border-cyan-400 bg-cyan-50 text-cyan-600 dark:border-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400`;
-  if (label.includes("Small")) return `${base} border-green-400 bg-green-50 text-green-600 dark:border-green-600 dark:bg-green-900/30 dark:text-green-400`;
-  if (label.includes("Medium")) return `${base} border-amber-400 bg-amber-50 text-amber-600 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-400`;
-  if (label.includes("Enterprise")) return `${base} border-purple-400 bg-purple-50 text-purple-600 dark:border-purple-600 dark:bg-purple-900/30 dark:text-purple-400`;
-  return `${base} border-gray-400 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-900/30 dark:text-gray-400`;
-}
-
 // Helper: format lead source for display
 function formatLeadSourceLabel(src: string | null | undefined): string {
   if (!src) return "";
@@ -83,8 +65,20 @@ function formatLeadSourceLabel(src: string | null | undefined): string {
 function formatDealStageLabel(stage: string | null | undefined): string {
   if (!stage) return "";
   const map: Record<string, string> = {
-    NEW_LEAD: "New Lead", CONTACTED: "Contacted", QUALIFIED: "Qualified",
-    IN_PROGRESS: "In progress", WON: "Closed Won", LOST: "Closed Lost"
+    NEW_LEAD: "New Lead",
+    QUALIFIED: "Qualification",
+    QUALIFICATION: "Qualification",
+    DEMO_SCHEDULED: "Demo Scheduled",
+    DEMO_DONE: "Demo Done",
+    PROPOSAL_SENT: "Proposal Sent",
+    NEGOTIATION: "Negotiation",
+    WON: "Closed Won",
+    LOST: "Closed Lost",
+    // Backwards compatibility for older codes
+    CONTACTED: "Qualification",
+    IN_PROGRESS: "Negotiation",
+    PROSPECTING: "New Lead",
+    PROPOSAL: "Proposal Sent",
   };
   return map[stage] || stage;
 }
@@ -707,7 +701,7 @@ export default function AdminAccountDetailPage() {
                 onChange={(value) => setCompanyForm((p) => ({ ...p, accountTypeId: value }))}
                 placeholder="Select type"
                 className={inputClass}
-                              />
+              />
             ) : (
               <PlaceholderInput
                 value={detail.accountTypeName}
