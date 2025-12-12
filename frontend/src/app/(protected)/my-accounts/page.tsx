@@ -82,19 +82,33 @@ export default function MyAccountsPage() {
 
   const formatDealStage = (code?: string | null) => {
     if (!code) return "";
-    switch ((code || "").toUpperCase()) {
+    switch (code.toUpperCase()) {
       case "NEW_LEAD":
         return "New Lead";
-      case "CONTACTED":
-        return "Contacted";
       case "QUALIFIED":
-        return "Qualified";
-      case "IN_PROGRESS":
-        return "In Progress";
+      case "QUALIFICATION":
+        return "Qualification";
+      case "DEMO_SCHEDULED":
+        return "Demo Scheduled";
+      case "DEMO_DONE":
+        return "Demo Done";
+      case "PROPOSAL_SENT":
+        return "Proposal Sent";
+      case "NEGOTIATION":
+        return "Negotiation";
       case "WON":
-        return "Won";
+        return "Closed Won";
       case "LOST":
-        return "Lost";
+        return "Closed Lost";
+      // Backwards compatibility for old codes
+      case "CONTACTED":
+        return "Qualification";
+      case "IN_PROGRESS":
+        return "Negotiation";
+      case "PROSPECTING":
+        return "New Lead";
+      case "PROPOSAL":
+        return "Proposal Sent";
       default:
         return code
           .toLowerCase()
@@ -117,9 +131,12 @@ export default function MyAccountsPage() {
   const sizeBadgeClass = (label: string) => {
     const base = "inline-flex items-center rounded-md border px-3 py-1 text-xs font-semibold leading-none";
     if (label === "Little") return `${base} border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-900/25 dark:text-cyan-300`;
-    if (label === "Small") return `${base} border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/25 dark:text-green-300`;
-    if (label === "Medium") return `${base} border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/25 dark:text-amber-300`;
-    if (label === "Enterprise") return `${base} border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/25 dark:text-purple-300`;
+    // Small: blue
+    if (label === "Small") return `${base} border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/25 dark:text-blue-300`;
+    // Medium: purple
+    if (label === "Medium") return `${base} border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/25 dark:text-purple-300`;
+    // Enterprise: green
+    if (label === "Enterprise") return `${base} border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/25 dark:text-emerald-300`;
     return "text-gray-400";
   };
 

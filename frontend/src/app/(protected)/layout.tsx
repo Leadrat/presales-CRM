@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, Users, BriefcaseBusiness, Building2 } from "lucide-react";
+import { LayoutDashboard, Users, BriefcaseBusiness, Building2, Trophy } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import AppShellHeader from "@/components/layout/AppShellHeader";
 import { useAuth } from "@/context/AuthContext";
@@ -18,6 +18,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   const isAccounts = pathname?.startsWith("/accounts");
   const isMyAccounts = pathname?.startsWith("/my-accounts");
   const isTeam = pathname?.startsWith("/team");
+  const isLeaderboard = pathname?.startsWith("/leaderboard");
 
   return (
     <ProtectedRoute>
@@ -110,6 +111,22 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
               <span className="flex items-center gap-3">
                 <Users className="h-5 w-5" />
                 <span>Team</span>
+              </span>
+            </button>
+
+            {/* Leaderboard (visible for all roles) */}
+            <button
+              type="button"
+              onClick={() => router.push("/leaderboard")}
+              className={`menu-item rounded-xl px-3 py-2 ${
+                isLeaderboard
+                  ? "menu-item-active bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/20 dark:text-blue-300"
+                  : "menu-item-inactive text-gray-700 hover:bg-blue-50 hover:text-blue-700 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-300"
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <Trophy className="h-5 w-5" />
+                <span>Leaderboard</span>
               </span>
             </button>
           </nav>

@@ -10,11 +10,6 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, setUser } = useAuth();
 
-  // Debug: Log user info
-  console.log("Profile page - user:", user);
-  console.log("Profile page - user role:", user?.role);
-  console.log("Profile page - isAdmin:", user?.role === "Admin");
-
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -40,7 +35,7 @@ export default function ProfilePage() {
       setError(null);
       try {
         // Store user ID to avoid null reference issues
-        const userId = user.id;
+        const userId = user!.id; // User is guaranteed to exist due to the check above
         const [detail, rolesList] = await Promise.all([getUser(userId), getUserRoles()]);
         if (cancelled) return;
         setFullName(detail.fullName || "");
@@ -93,7 +88,6 @@ export default function ProfilePage() {
         updateData.roleId = roleId || null;
       }
 
-      console.log("Updating user profile:", user.id, updateData);
       const saved = await updateUser(user.id, updateData);
       
       // Update local auth context with new user data
@@ -114,7 +108,6 @@ export default function ProfilePage() {
         setSuccess(null);
       }, 3000);
     } catch (err: any) {
-      console.error("Profile update error:", err);
       if (err?.status === 403) {
         setError("Permission denied: You don't have permission to edit profiles. Please contact your administrator.");
       } else {
@@ -241,12 +234,7 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-700"
-                  onClick={() => {
-                    console.log("Edit Profile button clicked!");
-                    console.log("Current editing state:", editing);
-                    console.log("User info:", user);
-                    setEditing(true);
-                  }}
+                  onClick={() => setEditing(true)}
                 >
                   Edit Profile
                 </button>
