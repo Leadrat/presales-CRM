@@ -10,6 +10,7 @@ import { AddContactModal } from "@/components/contacts/AddContactModal";
 import PlaceholderSelect from "@/components/form/PlaceholderSelect";
 import PlaceholderInput from "@/components/form/PlaceholderInput";
 import PhoneNumberInput from "@/components/form/PhoneNumberInput";
+import CrmProviderMultiSelect from "@/components/form/CrmProviderMultiSelect";
 
 export default function NewMyAccountPage() {
   const router = useRouter();
@@ -32,6 +33,8 @@ export default function NewMyAccountPage() {
   const [assignedToId, setAssignedToId] = useState(user?.id || "");
   const [accountSizeId, setAccountSizeId] = useState("");
   const [crmProviderId, setCrmProviderId] = useState("");
+  const [crmProviderName, setCrmProviderName] = useState("");
+  const [selectedCrmProviders, setSelectedCrmProviders] = useState<Array<{id: string | null; name: string}>>([]);
   const [numberOfUsers, setNumberOfUsers] = useState<string>("");
   const [crmExpiry, setCrmExpiry] = useState("");
   const [leadSource, setLeadSource] = useState("");
@@ -137,6 +140,18 @@ export default function NewMyAccountPage() {
     }
   }, [status, loadTeamMembers]);
 
+  // Refresh CRM providers after a new one is created
+  const refreshCrmProviders = useCallback(async () => {
+    try {
+      const data = await getAccountLookups();
+      setLookups(data);
+      return data?.crmProviders || [];
+    } catch (error) {
+      console.error("Failed to refresh CRM providers", error);
+      return lookups?.crmProviders || [];
+    }
+  }, [lookups?.crmProviders]);
+
   // Default createdBy / assignedTo to the logged-in user once data is ready
   useEffect(() => {
     if (status !== "authenticated" || !user || teamMembers.length === 0) return;
@@ -186,12 +201,16 @@ export default function NewMyAccountPage() {
         finalAccountSizeId = lookups.accountSizes[0].id;
       }
 
+      // Extract CRM tool names for the multi-select field
+      const crmToolNames = selectedCrmProviders.map(p => p.name).filter(Boolean);
+
       const payload = await createAccount({
         companyName: companyName.trim(),
         website: website.trim() || undefined,
         accountTypeId,
         accountSizeId: finalAccountSizeId,
         currentCrmId: crmProviderId || undefined,
+        crmTools: crmToolNames.length > 0 ? crmToolNames : undefined,
         numberOfUsers: numberOfUsers ? Number(numberOfUsers) : undefined,
         crmExpiry: crmExpiry.trim() || undefined,
         leadSource: leadSource.trim() || undefined,
@@ -491,13 +510,26 @@ export default function NewMyAccountPage() {
 
                     <div className="space-y-1.5">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Current CRM</label>
-                      <PlaceholderSelect
+                      <CrmProviderMultiSelect
                         options={orderedCrmProviders}
-                        value={crmProviderId}
-                        onChange={(value) => setCrmProviderId(value)}
-                        placeholder="Select CRM provider"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-0 focus:border-brand-400 focus:bg-white focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-100 dark:focus:bg-gray-900"
-                                              />
+                        values={selectedCrmProviders}
+                        onChange={({ providers }) => {
+                          setSelectedCrmProviders(providers);
+                          
+                          // For backward compatibility, also set the first CRM as the primary one
+                          if (providers.length > 0) {
+                            const primary = providers[0];
+                            setCrmProviderId(primary.id ?? "");
+                            setCrmProviderName(primary.id ? "" : primary.name);
+                          } else {
+                            setCrmProviderId("");
+                            setCrmProviderName("");
+                          }
+                        }}
+                        onRefreshOptions={refreshCrmProviders}
+                        placeholder="Select or type CRM providers"
+                        className="w-full"
+                      />
                     </div>
 
                     <div className="space-y-1.5">

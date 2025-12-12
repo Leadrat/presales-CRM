@@ -3,8 +3,21 @@ services:
     build:
       context: ./backend
     container_name: presales-backend
-    env_file:
-      - ./backend/.env
+    environment:
+      # JWT configuration
+      - JWT__SECRET=cf59a89d6cdc4ec48236efa204a2d7ff29b417793bdc4c6ba36244cbc150847b
+      - JWT__ISSUER=PreSales
+      - JWT__AUDIENCE=PreSalesClients
+      # Database connection
+      - ConnectionStrings__Default=Host=postgresql-caa1dffb-o9d7d637a.database.cloud.ovh.net;Port=20184;Database=shashank;Username=avnadmin;Password=EmZwIgKyz7b1uTO3a6F5;Ssl Mode=Require
+      # Environment settings
+      - ASPNETCORE_ENVIRONMENT=Development
+      - DOTNET_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://0.0.0.0:5033
+      - Logging__LogLevel__Default=Information
+      - Logging__LogLevel__Microsoft=Warning
+      - Logging__LogLevel__Microsoft.Hosting.Lifetime=Information
+      - FRONTEND_ORIGIN=http://localhost:3000
     ports:
       - "5033:5033"
 

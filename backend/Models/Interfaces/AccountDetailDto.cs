@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Api.Models.Interfaces;
 
@@ -28,6 +29,11 @@ public class AccountDetailDto
     public string AccountTypeName { get; set; } = string.Empty;
     public string AccountSizeName { get; set; } = string.Empty;
     public string CrmProviderName { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// List of CRM tool names used by this account (multi-select).
+    /// </summary>
+    public List<string> CrmTools { get; set; } = new();
 
     // Ownership / assignment
     public Guid CreatedByUserId { get; set; }

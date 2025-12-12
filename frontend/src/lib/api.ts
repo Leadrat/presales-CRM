@@ -84,7 +84,8 @@ export type AccountCreateInput = {
   accountTypeId: string;
   accountSizeId?: string;
   currentCrmId?: string;
-  currentCrmName?: string; // Text input for CRM name
+  currentCrmName?: string; // Text input for CRM name (legacy)
+  crmTools?: string[]; // Multi-select CRM tool names
   numberOfUsers?: number;
   crmExpiry?: string; // MM/YY
   // Spec 014: pipeline metadata
@@ -109,8 +110,9 @@ export type AccountUpdateInput = {
   accountTypeId?: string | null;
   accountSizeId?: string | null;
   currentCrmId?: string | null;
-  currentCrmName?: string | null; // Text input for CRM name
+  currentCrmName?: string | null; // Text input for CRM name (legacy)
   crmProviderName?: string | null; // Alias for currentCrmName
+  crmTools?: string[] | null; // Multi-select CRM tool names
   numberOfUsers?: number | null;
   crmExpiry?: string | null; // ISO date
   // Spec 014: pipeline metadata
@@ -532,6 +534,9 @@ export type AccountDetailDto = {
   accountTypeName: string;
   accountSizeName: string;
   crmProviderName: string;
+  
+  // Multi-select CRM tools
+  crmTools?: string[] | null;
 
   // Spec 014: pipeline metadata
   leadSource?: string | null;

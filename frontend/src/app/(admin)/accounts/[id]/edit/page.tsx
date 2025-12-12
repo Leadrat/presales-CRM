@@ -115,8 +115,23 @@ export default function AdminEditAccountPage() {
         const formattedCrmName = crmName === "None" || crmName === "None/Unknown" ? "" : crmName;
         setCrmProviderName(formattedCrmName);
         
-        // Initialize the multi-select CRM providers
-        if (account.currentCrmId) {
+        // Initialize the multi-select CRM providers from crmTools array
+        if (account.crmTools && account.crmTools.length > 0) {
+          // Filter out "None" and "None/Unknown" from the list
+          const filteredTools = account.crmTools.filter(
+            (t) => t !== "None" && t !== "None/Unknown"
+          );
+          // Map tool names to the expected format (id is null for custom entries)
+          const providers = filteredTools.map((name) => {
+            // Try to find matching provider in lookups
+            const matchingProvider = lookupData?.crmProviders.find(
+              (p) => p.name.toLowerCase() === name.toLowerCase()
+            );
+            return { id: matchingProvider?.id ?? null, name };
+          });
+          setSelectedCrmProviders(providers);
+        } else if (account.currentCrmId && formattedCrmName) {
+          // Fallback to single CRM for backward compatibility
           setSelectedCrmProviders([{ id: account.currentCrmId, name: formattedCrmName }]);
         } else if (formattedCrmName) {
           setSelectedCrmProviders([{ id: null, name: formattedCrmName }]);
@@ -181,16 +196,19 @@ export default function AdminEditAccountPage() {
       return;
     }
 
+    // Extract CRM tool names for the multi-select field
+    const crmToolNames = selectedCrmProviders.map(p => p.name).filter(Boolean);
+    
     const payload: AccountUpdateInput = {
       companyName: companyName.trim(),
       websiteUrl: website.trim() || undefined,
       accountTypeId,
       accountSizeId,
-      // Send the primary CRM (first in the list) as the main CRM
+      // Send the primary CRM (first in the list) as the main CRM for backward compatibility
       currentCrmId: selectedCrmProviders.length > 0 && selectedCrmProviders[0].id ? selectedCrmProviders[0].id : undefined,
       currentCrmName: selectedCrmProviders.length > 0 && !selectedCrmProviders[0].id ? selectedCrmProviders[0].name : undefined,
-      // In the future, we'll update the API to accept multiple CRMs
-      // crmProviders: selectedCrmProviders,
+      // Send all selected CRMs as crmTools array
+      crmTools: crmToolNames.length > 0 ? crmToolNames : undefined,
       numberOfUsers: numberOfUsers ? Number(numberOfUsers) : undefined,
       // If CRM expiry field is cleared, send empty string so backend clears CrmExpiry
       crmExpiry: crmExpiry.trim() === "" ? "" : crmExpiry.trim(),

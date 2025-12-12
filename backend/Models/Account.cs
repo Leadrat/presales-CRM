@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Api.Models;
 
@@ -21,6 +22,13 @@ public class Account
     public Guid AccountTypeId { get; set; }
     public Guid AccountSizeId { get; set; }
     public Guid CurrentCrmId { get; set; }
+    
+    /// <summary>
+    /// List of CRM tool names used by this account (stored as JSON array).
+    /// Supports multiple selections including custom entries.
+    /// </summary>
+    public List<string> CrmTools { get; set; } = new();
+    
     public DateTimeOffset? CrmExpiry { get; set; }
 
     public DateTimeOffset? ClosedDate { get; set; }

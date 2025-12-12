@@ -1,6 +1,6 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import { LeaderboardList } from "../../../src/app/(protected)/leaderboard/LeaderboardList";
+import { LeaderboardList } from "@/app/(protected)/leaderboard/LeaderboardList";
 import type { LeaderboardUserRow } from "@/lib/api";
 
 // Mock component to avoid Next.js Image issues in tests
