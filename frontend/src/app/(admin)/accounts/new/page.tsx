@@ -186,12 +186,16 @@ export default function NewAccountPage() {
         finalAccountSizeId = lookups.accountSizes[0].id;
       }
 
+      // Extract CRM tool names for the multi-select field
+      const crmToolNames = selectedCrmProviders.map(p => p.name).filter(Boolean);
+      
       const payload = await createAccount({
         companyName: companyName.trim(),
         website: website.trim() || undefined,
         accountTypeId,
         accountSizeId: finalAccountSizeId,
         currentCrmId: crmProviderId || undefined,
+        crmTools: crmToolNames.length > 0 ? crmToolNames : undefined,
         numberOfUsers: numberOfUsers ? Number(numberOfUsers) : undefined,
         crmExpiry: crmExpiry.trim() || undefined,
         leadSource: leadSource.trim() || undefined,

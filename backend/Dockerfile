@@ -19,8 +19,8 @@ WORKDIR /app
 # Copy published output
 COPY --from=build /app/publish .
 
-# Expose HTTP port and configure Kestrel
-ENV ASPNETCORE_URLS=http://+:5033
+# Expose HTTP port and configure Kestrel to listen on all interfaces
+ENV ASPNETCORE_URLS=http://0.0.0.0:5033
 EXPOSE 5033
 
 ENTRYPOINT ["dotnet", "Api.dll"]

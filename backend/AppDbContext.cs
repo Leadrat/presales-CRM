@@ -120,6 +120,11 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedAt).IsRequired();
             e.Property(x => x.UpdatedAt).IsRequired();
             e.Property(x => x.IsDeleted).IsRequired();
+            
+            // Store CrmTools as JSON array in PostgreSQL
+            e.Property(x => x.CrmTools)
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb");
 
             e.HasOne(x => x.AccountType)
                 .WithMany()

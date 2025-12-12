@@ -72,7 +72,8 @@ public class AccountsController : ControllerBase
         Guid AccountTypeId,
         Guid AccountSizeId,
         Guid? CurrentCrmId,
-        string? CurrentCrmName, // Text input for CRM name
+        string? CurrentCrmName, // Text input for CRM name (legacy, use CrmTools instead)
+        IReadOnlyList<string>? CrmTools, // Multi-select CRM tool names
         int? NumberOfUsers,
         string? CrmExpiry,
         string? LeadSource,
@@ -84,6 +85,8 @@ public class AccountsController : ControllerBase
         string? Phone,
         string? Email,
         string? City,
+        Guid? CreatedByUserId,
+        Guid? AssignedToUserId,
         IReadOnlyList<ContactCreateRequest>? Contacts
     );
 
@@ -93,7 +96,8 @@ public class AccountsController : ControllerBase
         Guid AccountTypeId,
         Guid AccountSizeId,
         Guid? CurrentCrmId,
-        string? CurrentCrmName, // Text input for CRM name
+        string? CurrentCrmName, // Text input for CRM name (legacy, use CrmTools instead)
+        IReadOnlyList<string>? CrmTools, // Multi-select CRM tool names
         int? NumberOfUsers,
         string? CrmExpiry,
         string? LeadSource,
@@ -277,6 +281,35 @@ public class AccountsController : ControllerBase
 
         // Use default expiry (1 year from now) if not provided
 
+        // Process CrmTools: auto-create new CRM providers if needed
+        var crmTools = new List<string>();
+        if (request.CrmTools != null && request.CrmTools.Count > 0)
+        {
+            foreach (var toolName in request.CrmTools.Where(t => !string.IsNullOrWhiteSpace(t)).Distinct())
+            {
+                var trimmedName = toolName.Trim();
+                crmTools.Add(trimmedName);
+                
+                // Auto-create CRM provider if it doesn't exist (for dropdown suggestions)
+                var existingProvider = await _db.CrmProviders
+                    .FirstOrDefaultAsync(p => p.Name.ToLower() == trimmedName.ToLower());
+                if (existingProvider == null)
+                {
+                    var maxOrder = await _db.CrmProviders.MaxAsync(p => (int?)p.DisplayOrder) ?? 0;
+                    _db.CrmProviders.Add(new CrmProvider
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = trimmedName,
+                        DisplayOrder = maxOrder + 1
+                    });
+                }
+            }
+        }
+
+        // Determine CreatedByUserId and AssignedToUserId
+        var createdByUserId = request.CreatedByUserId ?? _current.UserId.Value;
+        var assignedToUserId = request.AssignedToUserId ?? _current.UserId.Value;
+
         var account = new Account
         {
             Id = Guid.NewGuid(),
@@ -284,11 +317,12 @@ public class AccountsController : ControllerBase
             AccountTypeId = request.AccountTypeId,
             AccountSizeId = request.AccountSizeId,
             CurrentCrmId = crmProviderId,
+            CrmTools = crmTools,
             CrmExpiry = crmExpiryDate,
             LeadSource = leadSource,
             DealStage = dealStage,
-            CreatedByUserId = _current.UserId.Value,
-            AssignedToUserId = _current.UserId.Value,
+            CreatedByUserId = createdByUserId,
+            AssignedToUserId = assignedToUserId,
             CreatedAt = now,
             UpdatedAt = now,
             IsDeleted = false,
@@ -370,9 +404,11 @@ public class AccountsController : ControllerBase
                 accountTypeId = account.AccountTypeId,
                 accountSizeId = account.AccountSizeId,
                 currentCrmId = account.CurrentCrmId,
+                crmTools = account.CrmTools,
                 numberOfUsers = (int?)account.NumberOfUsers,
                 crmExpiry = account.CrmExpiry,
                 createdByUserId = account.CreatedByUserId,
+                assignedToUserId = account.AssignedToUserId,
                 createdAt = account.CreatedAt,
                 updatedAt = account.UpdatedAt,
                 isDeleted = account.IsDeleted,
@@ -948,6 +984,7 @@ public class AccountsController : ControllerBase
             AccountTypeName = account.AccountType.Name,
             AccountSizeName = account.AccountSize.Name,
             CrmProviderName = account.CurrentCrm.Name,
+            CrmTools = account.CrmTools ?? new List<string>(),
             CrmExpiry = account.CrmExpiry,
             LeadSource = account.LeadSource,
             DealStage = account.DealStage,
@@ -1052,6 +1089,33 @@ public class AccountsController : ControllerBase
         {
             account.CurrentCrmId = await ResolveCrmProviderAsync(null, request.CurrentCrmName);
         }
+        
+        // Update CrmTools if provided
+        if (request.CrmTools != null)
+        {
+            var crmTools = new List<string>();
+            foreach (var toolName in request.CrmTools.Where(t => !string.IsNullOrWhiteSpace(t)).Distinct())
+            {
+                var trimmedName = toolName.Trim();
+                crmTools.Add(trimmedName);
+                
+                // Auto-create CRM provider if it doesn't exist (for dropdown suggestions)
+                var existingProvider = await _db.CrmProviders
+                    .FirstOrDefaultAsync(p => p.Name.ToLower() == trimmedName.ToLower());
+                if (existingProvider == null)
+                {
+                    var maxOrder = await _db.CrmProviders.MaxAsync(p => (int?)p.DisplayOrder) ?? 0;
+                    _db.CrmProviders.Add(new CrmProvider
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = trimmedName,
+                        DisplayOrder = maxOrder + 1
+                    });
+                }
+            }
+            account.CrmTools = crmTools;
+        }
+        
         if (clearCrmExpiry)
         {
             account.CrmExpiry = null;
